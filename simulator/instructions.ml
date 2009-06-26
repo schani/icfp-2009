@@ -10,11 +10,13 @@ type s_instruction = | Noop
 		     | Input
  
 
-type instruction = | D_Instruction of d_instruction * addr * addr
-		   | S_Instruction of s_instruction * comparison * addr 
+type instruction = 		   
+  | No_Instruction
+  | D_Instruction of d_instruction * addr * addr
+  | S_Instruction of s_instruction * comparison * addr 
 
 
-let zero = S_Instruction (Noop,LTZ,0)
+let zero = No_Instruction
 
 let badcode str code = 
   failwith (Printf.sprintf "Bad Instruction: %s: %x" str code)
@@ -66,6 +68,7 @@ let s_code_to_string = function
 let insn_to_string = function
   | S_Instruction (s,_,_) -> s_code_to_string s
   | D_Instruction (d,_,_) -> d_code_to_string d
+  | No_Instruction -> "Moo-nop"
 
 let decode_insn insn =
   let insn = 
