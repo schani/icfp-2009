@@ -104,13 +104,6 @@ let get_comparator = function
   | GEZ -> (>=)
   | GTZ -> (>)
 
-let get_operation = function
-  | Add ->  ( +. )
-  | Sub ->  ( -. )
-  | Mult -> ( *. )
-  | _ -> failwith "get_operation called with an op (Div,Phi,Output) that is handled directly."
-
-
 let execute_one_instruction m = 
   match fetch_insn m with
     | No_Instruction -> 
@@ -146,10 +139,20 @@ let execute_one_instruction m =
 	  else
 	    ( /. ) op1 op2);
 	`More
-    | D_Instruction (op,r1,r2) -> 
+    | D_Instruction (Add,r1,r2) -> 
 	let op1 = read_data !m r1 in
 	let op2 = read_data !m r2 in
-	save_result m ((get_operation op) op1 op2);
+	save_result m (( +. ) op1 op2);
+	`More
+    | D_Instruction (Mult,r1,r2) -> 
+	let op1 = read_data !m r1 in
+	let op2 = read_data !m r2 in
+	save_result m (( *. ) op1 op2);
+	`More
+    | D_Instruction (Sub,r1,r2) -> 
+	let op1 = read_data !m r1 in
+	let op2 = read_data !m r2 in
+	save_result m (( -. ) op1 op2);
 	`More
 	  	
     
@@ -194,7 +197,7 @@ let vm_configure m config =
 	
 (* this executes "one simulation step, i.e., 1 sec "*)
 let vm_execute_one_step m = 
-  let m = {m with datamem = Array.copy m.datamem} in
+  (* let m = {m with datamem = Array.copy m.datamem} in *)
   let m = ref m in
   while execute_one_instruction m <> `Done do
     ()
@@ -204,7 +207,7 @@ let vm_execute_one_step m =
 let vm_execute m controller = 
   let rec loop m = 
     let m = vm_execute_one_step m in
-    (* Printf.printf "%c%07d" (Char.chr 0x0d) m.timestep; *) 
+    (*Printf.printf "%c%07d" (Char.chr 0x0d) m.timestep; *)
     if ((vm_read_sensor m 0) <> 0.) || (m.timestep = 3000000) then
       (* score written -> eog || 3M timesteps*)
       m
