@@ -35,6 +35,7 @@ type machine_state =
       instruction_pointer:int;
       input_ports: float IntMap.t;
       output_ports: float IntMap.t;
+      timestep: int;
     }
 
 let memsize = 0x4000
@@ -74,12 +75,12 @@ let alloc_machine problem =
     instruction_pointer = -1;
     input_ports = IntMap.empty;
     output_ports = IntMap.empty;
+    timestep = 0;
   }
 
 let fetch_insn m = 
-  let ip =  !m.instruction_pointer in
-  m := {!m with instruction_pointer = ip + 1};
-  read_insn !m ip
+  m := {!m with instruction_pointer = !m.instruction_pointer + 1};
+  read_insn !m !m.instruction_pointer
 
 let save_result m res = 
   write_data !m !m.instruction_pointer res
@@ -151,17 +152,6 @@ let execute_one_instruction m =
 	save_result m ((get_operation op) op1 op2);
 	`More
 	  	
-	
-	
-
-(* this executes "one simulation step, i.e., 1 sec "*)
-let vm_execute_one_step m = 
-  let m = {m with datamem = Array.copy m.datamem} in
-  let m = ref m in
-  while execute_one_instruction m <> `Done do
-    ()
-  done;
-  !m
     
 let write_actuator m portno data = 
   {m with input_ports = IntMap.add portno data m.input_ports}
@@ -170,8 +160,11 @@ let vm_write_actuator m portid data =
   write_actuator m (input_port_number portid) data
 
 let vm_read_sensor m address = 
-  IntMap.find m address
-
+  try 
+    IntMap.find  address m.output_ports
+  with 
+      Not_found -> 
+	0.
 
 let vm_init_machine problem = 
   let m = alloc_machine problem in
@@ -184,7 +177,7 @@ let vm_init_machine problem =
     loop ic
   in
   try 
-    loop ic;
+    ignore(loop ic);
     m
   with
     | End_of_file -> 
@@ -197,3 +190,28 @@ let vm_configure m config =
     write_actuator m 0x3E80 (float_of_int config)
   else
     failwith "bad config"
+
+	
+(* this executes "one simulation step, i.e., 1 sec "*)
+let vm_execute_one_step m = 
+  let m = {m with datamem = Array.copy m.datamem} in
+  let m = ref m in
+  while execute_one_instruction m <> `Done do
+    ()
+  done;
+  {!m with timestep = !m.timestep + 1; instruction_pointer = -1; }
+
+let vm_execute m controller = 
+  let rec loop m = 
+    let m = vm_execute_one_step m in
+    (* Printf.printf "%c%07d" (Char.chr 0x0d) m.timestep; *) 
+    if ((vm_read_sensor m 0) <> 0.) || (m.timestep = 3000000) then
+      (* score written -> eog || 3M timesteps*)
+      m
+    else
+      loop (controller m)
+  in
+  let m = loop m in 
+  print_string "muhkuh\n";
+  m 
+    

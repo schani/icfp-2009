@@ -76,7 +76,7 @@ let decode_insn insn =
       | 0x0 -> (* S_Instruction *)
 	let scode = s_code_of_int  (shift_right_to_int insn 24   0xf) in
 	let ccode = match scode with 
-	  | Cmpz -> cmpcode_of_int (shift_right_to_int insn 20 0xf) 
+	  | Cmpz -> cmpcode_of_int (shift_right_to_int insn 21 0x7) 
 	  | _ -> EQZ
 	in
 	let r1    = shift_right_to_int insn 0 0x3fff in
