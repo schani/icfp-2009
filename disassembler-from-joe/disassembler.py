@@ -3,12 +3,12 @@
 import struct
 import sys
 
-odd = -1
+addr = -1
 while 1:
-	odd += 1
-	if (odd & 1) == 0:
-		val = sys.stdin.read(8)
-		if val == "":
+	addr += 1
+	if (addr & 1) == 0:
+		val_s = sys.stdin.read(8)
+		if val_s == "":
 			sys.exit()
 
 		s = sys.stdin.read(4)
@@ -19,12 +19,16 @@ while 1:
 		if s == "":
 			sys.exit()
 
-		val = sys.stdin.read(8)
-		if val == "":
+		val_s = sys.stdin.read(8)
+		if val_s == "":
 			sys.exit()
 
 	i = struct.unpack("i", s)[0]
 	op1 = (i & 0xf0000000) >> 28
+
+	val = struct.unpack("l", val_s)[0]
+
+	print "%d (%x)" % (addr, val),
 
 	if op1 == 0:
 		op2 = (i & 0xf000000) >> 24
