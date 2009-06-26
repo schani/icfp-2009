@@ -33,12 +33,24 @@ while 1:
 	if op1 == 0:
 		op2 = (i & 0xf000000) >> 24
 		imm = (i & 0xffc000) >> 14
+		cmpop = (i & 0xf00000) >> 20
 		r1 = (i & 0x3fff)
 
 		if op2 == 0:
 			print "Noop"
 		elif op2 == 1:
-			print "Cmpz %d, %d" % (imm, r1)
+			if cmpop == 0:
+				print "Cmpz.LTZ %d" % r1
+			elif cmpop == 1:
+				print "Cmpz.LEZ %d" % r1
+			elif cmpop == 2:
+				print "Cmpz.EQZ %d" % r1
+			elif cmpop == 3:
+				print "Cmpz.GEZ %d" % r1
+			elif cmpop == 4:
+				print "Cmpz.GTZ %d" % r1
+			else:
+				raise Exception("Invalid immediate (%d) in Cmpzl" % imm)
 		elif op2 == 2:
 			print "Sqrt %d" % r1
 		elif op2 == 3:
