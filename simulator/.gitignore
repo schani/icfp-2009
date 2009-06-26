@@ -1,0 +1,7 @@
+*.cmo
+*.cmi
+*.o
+*.cmx
+*.deps
+sim
+sim.opt

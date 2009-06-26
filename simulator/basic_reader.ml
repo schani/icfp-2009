@@ -14,7 +14,7 @@ let input_insn ic =
   let i32 = ref Int32.zero in
   for i = 0 to 3 do
     i32 := Int32.logor !i32
-      (Int32.shift_left (Int32.of_int (input_byte ic)) (i*8));
+      (Int32.shift_left (Int32.of_int (input_byte ic)) ((i)*8));
   done;
   !i32 
     
@@ -33,7 +33,6 @@ let basic_read_memory_line (ic,i) =
       let data = input_data ic in
       (data,insn)
   in
-  print_int i; print_float data; print_newline ();
   (data,insn),(ic,i+1)
       
       
