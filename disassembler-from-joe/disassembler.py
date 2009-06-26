@@ -3,6 +3,33 @@
 import struct
 import sys
 
+class CodeSink:
+	# op is 'add', 'sub', 'mult', or 'div'
+	def alu_op(self, mem, op, r1, r2):
+		pass
+
+	def output_op(self, mem, r1, r2):
+		pass
+
+	def phi_op(self, mem, r1, r2):
+		pass
+
+	def noop_op(self, mem):
+		pass
+
+	# op is 'ltz', 'lez', 'eqz', 'gez', or 'gtz'
+	def cmpz_op(self, mem, op, imm, r1):
+		pass
+
+	def sqrt_op(self, mem, r1):
+		pass
+
+	def copy_op(self, mem, r1):
+		pass
+
+	def input_op(self, mem, r1):
+		pass
+
 addr = -1
 while 1:
 	addr += 1
