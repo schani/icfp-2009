@@ -26,9 +26,9 @@ while 1:
 	i = struct.unpack("i", s)[0]
 	op1 = (i & 0xf0000000) >> 28
 
-	val = struct.unpack("l", val_s)[0]
+	val = struct.unpack("d", val_s)[0]
 
-	print "%d (%x)" % (addr, val),
+	print "%d (%f)" % (addr, val),
 
 	if op1 == 0:
 		op2 = (i & 0xf000000) >> 24
