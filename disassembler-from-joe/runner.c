@@ -782,7 +782,7 @@ main (int argc, char *argv[])
     int t_to_our_apogee, t_to_our_perigee;
     int t_to_sat_apogee, t_to_sat_perigee;
 
-    calc_ellipse(&global_state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos);
+    calc_ellipse_bertl(&global_state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos);
 
     g_print("s us: t to apogee: %d  perigee: %d\n", t_to_our_apogee, t_to_our_perigee);
     g_print("apogee (%f) ", v_angle(our_apogee) / G_PI * 180.0);
@@ -791,7 +791,7 @@ main (int argc, char *argv[])
     print_vec(our_perigee);
     g_print("\n\n");
 
-    calc_ellipse(&global_state, &sat_apogee, &sat_perigee, &t_to_sat_apogee, &t_to_sat_perigee, get_meet_greet_sat_pos);
+    calc_ellipse_bertl(&global_state, &sat_apogee, &sat_perigee, &t_to_sat_apogee, &t_to_sat_perigee, get_meet_greet_sat_pos);
 
     g_print("s sat: t to apogee: %d  perigee: %d\n", t_to_sat_apogee, t_to_sat_perigee);
     g_print("apogee (%f) ", v_angle(sat_apogee) / G_PI * 180.0);
