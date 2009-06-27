@@ -13,7 +13,20 @@ static const vector_t v_zero = { 0.0, 0.0 };
 typedef void (*compare_init_func_t) (guint32 n, gpointer user_data);
 typedef void (*set_new_value_func_t) (guint32 addr, double new_value, gpointer user_data);
 
-#include "out.c"
+#if defined(BIN1)
+#define SCENARIO	1001
+#include "bin1.c"
+#elif defined(BIN2)
+#define SCENARIO	2001
+#include "bin2.c"
+#elif defined(BIN3)
+#define SCENARIO	3003
+#include "bin3.c"
+#else
+#error bla
+#endif
+
+typedef vector_t (*get_pos_func_t) (machine_state_t *state);
 
 FILE *dump_file = NULL;
 FILE *global_trace = NULL;
@@ -67,22 +80,58 @@ write_timestep (FILE *trace, machine_inputs_t *old, machine_inputs_t *new)
     compare_inputs(old, new, write_count_func, write_value_func, trace);
 }
 
+static vector_t
+get_pos (machine_state_t *state)
+{
+    vector_t v;
+
+    v.x = -state->output[2];
+    v.y = -state->output[3];
+
+    return v;
+}
+
+#if defined(BIN1)
 static void
 print_timestep (machine_state_t *state)
 {
-    double sx = state->output[2];
-    double sy = state->output[3];
+    double sx = -state->output[2];
+    double sy = -state->output[3];
 
     if (dump_file != NULL)
-	fprintf(dump_file, "%d %f %f %f %f %f %f\n", global_iter, state->output[0], state->output[1],
+	fprintf(dump_file, "%d %f %f %f %f 1 0 0 %f %f\n", global_iter, state->output[0], state->output[1],
 		sx, sy, state->output[4], sqrt(sx * sx + sy * sy));
-
-    /*
-	fprintf(dump_file, "%d %f %f %f %f %f\n", global_iter, state->output[0], sx, sy, state->output[4],
-	sqrt(sx * sx + sy * sy));
-    */
-
 }
+#elif defined(BIN2) || defined(BIN3)
+static void
+print_timestep (machine_state_t *state)
+{
+    double sx = -state->output[2];
+    double sy = -state->output[3];
+
+    double dx = state->output[4];
+    double dy = state->output[5];
+
+    if (dump_file != NULL)
+	fprintf(dump_file, "%d %f %f %f %f 0 1 0 %f %f %f\n", global_iter, state->output[0], state->output[1],
+		sx, sy, sx + dx, sy + dy, sqrt(sx * sx + sy * sy));
+}
+
+static vector_t
+get_meet_greet_sat_pos (machine_state_t *state)
+{
+    vector_t pos = get_pos(state);
+
+    double dx = state->output[4];
+    double dy = state->output[5];
+
+    vector_t v = { pos.x + dx, pos.y + dy };
+
+    return v;
+}
+#else
+#error bla
+#endif
 
 static void
 global_timestep (void)
@@ -101,17 +150,6 @@ do_timestep (machine_state_t *state)
 	global_timestep();
     else
 	timestep(state);
-}
-
-static vector_t
-get_pos (machine_state_t *state)
-{
-    vector_t v;
-
-    v.x = -state->output[2];
-    v.y = -state->output[3];
-
-    return v;
 }
 
 static vector_t
@@ -261,6 +299,15 @@ set_thrust (machine_state_t *state, vector_t thrust)
     state->inputs.input_3 = thrust.y;
 }
 
+static void
+do_n_timesteps (machine_state_t *state, int num_iters)
+{
+    for (int i = 0; i < num_iters; ++i) {
+	do_timestep(state);
+	set_thrust(state, v_zero);
+    }
+}
+
 static double
 calc_apogee (machine_state_t *state, vector_t thrust, double max_dist, int *num_iters)
 {
@@ -291,6 +338,53 @@ calc_apogee (machine_state_t *state, vector_t thrust, double max_dist, int *num_
 	}
 
 	++i;
+    }
+}
+
+static void
+calc_ellipse (machine_state_t *state, vector_t *apogee, vector_t *perigee, int *t_to_apogee, int *t_to_perigee,
+	      get_pos_func_t get_pos_func)
+{
+    machine_state_t copy = *state;
+    double dist = v_abs(get_pos_func(&copy));
+    gboolean ascending;
+    gboolean have_apogee = FALSE, have_perigee = FALSE;
+    vector_t pos;
+    int iter = 0;
+
+    timestep(&copy);
+    ++iter;
+    set_thrust(&copy, v_zero);
+
+    ascending = v_abs(get_pos_func(&copy)) > dist;
+    pos = get_pos_func(&copy);
+    dist = v_abs(pos);
+
+    while (!have_apogee || !have_perigee) {
+	gboolean new_ascending;
+
+	timestep(&copy);
+	new_ascending = v_abs(get_pos_func(&copy)) > dist;
+
+	if (new_ascending != ascending) {
+	    if (ascending) {
+		g_assert(!have_apogee);
+		have_apogee = TRUE;
+		*apogee = pos;
+		*t_to_apogee = iter;
+	    } else {
+		g_assert(!have_perigee);
+		have_perigee = TRUE;
+		*perigee = pos;
+		*t_to_perigee = iter;
+	    }
+	}
+
+	ascending = new_ascending;
+	pos = get_pos_func(&copy);
+	dist = v_abs(pos);
+
+	++iter;
     }
 }
 
@@ -423,7 +517,7 @@ between_angles (double angle, double a1, double a2, double max_diff)
 }
 
 static int
-timestep_until_angle (machine_state_t *state, double angle, double max_dist)
+timestep_until_angle (machine_state_t *state, double angle, double max_dist, gboolean *have_angle)
 {
     double start_angle = get_angle(state);
     double dest_angle = start_angle + angle;
@@ -439,8 +533,11 @@ timestep_until_angle (machine_state_t *state, double angle, double max_dist)
 	set_thrust(state, v_zero);
 	++i;
 
-	if (distance_from_earth(state) >= max_dist)
+	if (distance_from_earth(state) >= max_dist) {
+	    if (have_angle != NULL)
+		*have_angle = FALSE;
 	    return i;
+	}
 
 	double new_angle = get_angle(state);
 
@@ -448,6 +545,8 @@ timestep_until_angle (machine_state_t *state, double angle, double max_dist)
 
 	if (between_angles(dest_angle, old_angle, new_angle, 0.2)) {
 	    g_print("at angle %f (dest angle %f) - dist %f\n", new_angle, dest_angle, distance_from_earth(state));
+	    if (have_angle != NULL)
+		*have_angle = TRUE;
 	    return i;
 	}
 
@@ -466,7 +565,7 @@ calc_distance_after_angle (machine_state_t *state, vector_t thrust, double angle
 
     set_thrust(&copy, thrust);
 
-    i = timestep_until_angle(&copy, angle, max_dist);
+    i = timestep_until_angle(&copy, angle, max_dist, NULL);
     if (num_iters != NULL)
 	*num_iters = i;
 
@@ -514,13 +613,12 @@ inject_bielliptical_to_circular (machine_state_t *state, double dest_apogee, dou
     g_assert_not_reached();
 }
 
-#define SCENARIO	1001
-
 int
 main (int argc, char *argv[])
 {
     int num_iters, i;
     double dest_apogee;
+    gboolean have_angle = FALSE;
 
     if (argc > 1)
 	dump_file = fopen(argv[1], "w");
@@ -535,19 +633,22 @@ main (int argc, char *argv[])
 
     global_timestep();
 
+#if defined(BIN1)
     dest_apogee = global_state.output[4];
 
     num_iters = inject_circular_to_elliptical(&global_state, dest_apogee, 1.0);
-    // thrust more
-    set_thrust(&global_state, v_mul_scal(get_thrust(&global_state), 1.05));
-    timestep_until_angle(&global_state, G_PI, dest_apogee * 2.0);
 
-    /*
-    for (i = 0; i < num_iters; ++i) {
-	global_timestep();
-	set_thrust(&global_state, v_zero);
+#if 1
+    do_n_timesteps(&global_state, num_iters);
+    inject_elliptical_to_circular(&global_state, 1.0, dest_apogee, 900, 1.0);
+#else
+    // thrust more
+    set_thrust(&global_state, v_mul_scal(get_thrust(&global_state), 1.25));
+    timestep_until_angle(&global_state, G_PI, dest_apogee * 100.0, &have_angle);
+    if (!have_angle) {
+	g_print("don't have angle\n");
+	return 1;
     }
-    */
 
     num_iters = inject_bielliptical_to_circular(&global_state, dest_apogee, 1.0);
     for (i = 0; i < num_iters; ++i) {
@@ -563,6 +664,36 @@ main (int argc, char *argv[])
 	set_thrust(&global_state, v_zero);
     }
     */
+#endif
+#elif defined(BIN2)
+    g_assert_not_reached();
+#elif defined(BIN3)
+
+    vector_t our_apogee, our_perigee;
+    vector_t sat_apogee, sat_perigee;
+    int t_to_our_apogee, t_to_our_perigee;
+    int t_to_sat_apogee, t_to_sat_perigee;
+
+    calc_ellipse(&global_state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos);
+
+    g_print("us: t to apogee: %d  perigee: %d\n", t_to_our_apogee, t_to_our_perigee);
+    g_print("apogee (%f) ", v_angle(our_apogee) / G_PI * 180.0);
+    print_vec(our_apogee);
+    g_print("   perigee (%f) ", v_angle(our_perigee) / G_PI * 180.0);
+    print_vec(our_perigee);
+    g_print("\n\n");
+
+    calc_ellipse(&global_state, &sat_apogee, &sat_perigee, &t_to_sat_apogee, &t_to_sat_perigee, get_meet_greet_sat_pos);
+
+    g_print("sat: t to apogee: %d  perigee: %d\n", t_to_sat_apogee, t_to_sat_perigee);
+    g_print("apogee (%f) ", v_angle(sat_apogee) / G_PI * 180.0);
+    print_vec(sat_apogee);
+    g_print("   perigee (%f) ", v_angle(sat_perigee) / G_PI * 180.0);
+    print_vec(sat_perigee);
+    g_print("\n\n");
+#else
+#error bla
+#endif
 
     while (global_iter < 3000000 && global_state.output[0] == 0.0) {
 	global_timestep();
