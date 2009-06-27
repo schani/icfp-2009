@@ -218,8 +218,6 @@ static double
 v_angle (vector_t v)
 {
     double angle = atan2(v.y, v.x);
-    if (angle < 0.0)
-	angle += 2.0 * G_PI;
     return angle;
 }
 
@@ -237,6 +235,12 @@ static double
 a_delta (double a1, double a2)
 {
     return a_norm(a2-a1);
+}
+
+static double
+a_sign (double angle)
+{
+    return (angle >= 0) ? 1.0 : -1.0;
 }
 
 static void
@@ -281,8 +285,8 @@ get_norm_speed (machine_state_t *state)
     new = get_pos(&copy);
 
     {
-	double a1 = atan2(old.y, old.x);
-	double a2 = atan2(new.y, new.x);
+	double a1 = v_angle(old);
+	double a2 = v_angle(new);
 	double da = a_norm(a2-a1);
 
 	vector_t veld = v_sub(new, old);
@@ -446,6 +450,72 @@ calc_ellipse (machine_state_t *state, vector_t *apogee, vector_t *perigee, int *
 	++iter;
     }
 }
+
+
+
+calc_ellipse_bertl(machine_state_t *state, vector_t *apogee, vector_t *perigee, 
+		int *t_to_apogee, int *t_to_perigee,
+	      	get_pos_func_t get_pos_func))
+
+{
+    machine_state_t copy = *state;
+
+    vector_t pos = get_pos_func(&copy);
+    double dist = v_abs(pos);
+
+    double start_angle = v_angle(pos);
+    double sign_delta = a_sign(0);
+    double sign_last = sign_delta;
+    int sign_flip = 0;
+    int iter = 0;
+
+    double min_dist = dist;
+    double max_dist = dist;
+    vector_t min_pos = pos;
+    vector_t max_pos = pos;
+    int min_iter = iter;
+    int max_iter = iter;
+
+    do {
+	double angle;
+
+	timestep(&copy);
+	iter++;
+
+	pos = get_pos_func(&copy);
+	dist = v_abs(pos);
+	angle = v_angle(pos);
+
+
+	if (dist < min_dist) {
+	    min_dist = dist;
+	    min_pos = pos;
+	    min_iter = iter;
+	}
+
+	if (dist > max_dist) {
+	    max_dist = dist;
+	    max_pos = pos;
+	    max_iter = iter;
+	}
+
+	sign_delta = a_sign(angle - start_angle);
+	if (sign_last != sign_delta) {
+	    sign_last = sign_delta;
+	    sign_flip++
+	}
+    } while (sign_flip < 2);
+
+    if (apogee)
+	*apogee = max_pos;
+    if (perigee)
+	*perigee = min_pos;
+    if (t_to_apogee)
+	*t_to_apogee = max_iter;
+    if (t_to_perigee)
+	*t_to_perigee = min_iter;
+}
+
 
 static int
 inject_circular_to_elliptical (machine_state_t *state, double dest_apogee, double tolerance)
