@@ -272,7 +272,6 @@ class CGenerator (CodeCollector):
 		self.port_max = -1
 		self.inputs = set([])
 		self.vars = set([])
-		print 'typedef struct {'
 		for addr in range(len(self.code)):
 			op = self.code[addr]
 			if op[0] == 'input':
@@ -283,11 +282,27 @@ class CGenerator (CodeCollector):
 				pass
 			else:
 				self.vars.add(addr)
-				print 'double %s;' % var_name(addr)
+
+		print 'typedef struct {'
 		for input in self.inputs:
 			print 'double input_%d;' % input
+		print '} machine_inputs_t;'
+
+		print 'typedef struct {'
+		for addr in self.vars:
+			print 'double %s;' % var_name(addr)
 		print 'double output[%d];' % (self.port_max+1)
+		print 'machine_inputs_t inputs;'
 		print '} machine_state_t;'
+
+		print 'void compare_inputs (machine_inputs_t *old, machine_inputs_t *new, compare_init_func_t init, set_new_value_func_t set, gpointer user_data) {'
+		print 'guint32 count = 0;'
+		for input in self.inputs:
+			print 'if (old->input_%d != new->input_%d) ++count;' % (input, input)
+		print 'init(count, user_data);'
+		for input in self.inputs:
+			print 'if (old->input_%d != new->input_%d) set(%d, new->input_%d, user_data);' % (input, input, input, input)
+		print '}'
 
 	def gen_inits(self):
 		print 'void init_machine (machine_state_t *state) {'
@@ -298,7 +313,7 @@ class CGenerator (CodeCollector):
 			print '};'
 			print 'state->%s = *(double*)%s_mem;' % (var_name(addr), var_name(addr))
 		for input in self.inputs:
-			print 'state->input_%d = 0.0;' % input
+			print 'state->inputs.input_%d = 0.0;' % input
 		print 'for (int i = 0; i < %d; ++i) state->output[i] = 0.0;' % (self.port_max+1)
 		print '}'
 
@@ -334,7 +349,7 @@ class CGenerator (CodeCollector):
 			elif op[0] == 'copy':
 				print 'state->%s = state->%s;' % (var_name(addr), var_name(op[1]))
 			elif op[0] == 'input':
-				print 'state->%s = state->input_%d;' % (var_name(addr), op[1])
+				print 'state->%s = state->inputs.input_%d;' % (var_name(addr), op[1])
 			else:
 				raise Exception('Unknown opcode %s' % op[0])
 			#if op[0] != 'noop' and op[0] != 'cmpz' and op[0] != 'output':
