@@ -27,7 +27,8 @@ let rgb_magenta = 1.0, 0.0, 1.0
 
 let our_x = ref 0.0
 let our_y = ref 0.0
-let our_target_orbit = ref 0.0
+let our_orbits = ref []
+let our_sats = ref []
 
 let our_history : (float * float) list ref = ref []
 
@@ -153,9 +154,15 @@ let show_orbit ?(color=rgb_yellow) surface spasc r =
   set_color surface color;
   paint_circle surface spasc (ccx spasc 0.0) (ccy spasc 0.0) (vc spasc r)
 
+let show_orbits ?(color=rgb_yellow) surface spasc rs =
+  List.iter (fun r -> show_orbit ~color surface spasc r) rs
+
 let show_sat ?(color=rgb_red) surface spasc x y =
   set_color surface color;
   paint_circle surface spasc (ccx spasc x) (ccy spasc y) 3.0
+
+let show_sats ?(color=rgb_red) surface spasc sats =
+  List.iter (fun (x, y) -> show_sat ~color surface spasc x y) sats
 
 let show_earth surface spasc =
   set_color surface rgb_green;
@@ -239,7 +246,8 @@ let make_orbit_window () =
 	let surface = (surface_from_gdk_pixmap pixmap#pixmap)
 	in
 	  show_earth surface spasc;
-	  show_orbit surface spasc !our_target_orbit;
+	  show_orbits surface spasc !our_orbits;
+	  show_sats surface spasc ~color:rgb_cyan !our_sats;
 	  show_sat surface spasc !our_x !our_y;
 	  show_trace surface spasc !our_history;
 	  d#put_pixmap ~x:0 ~y:0 ~xsrc:0 ~ysrc:0
@@ -248,7 +256,7 @@ let make_orbit_window () =
     in let remove_timeout = ref (fun () -> ())
     in let rec timeout_handler () =
 	if !playing then begin
-	  let stamp, score, fuel, x, y, orbit, rem =
+	  let stamp, score, fuel, x, y, orbits, sats, rem =
 	    q.Vmbridge.step spasc.speed;
 	  in
 	    if ((int_of_float !our_x) <> (int_of_float x)) or
@@ -261,7 +269,8 @@ let make_orbit_window () =
 		 stamp score fuel x y rem);
 	    our_x := x;
 	    our_y := y;
-	    our_target_orbit := orbit;
+	    our_orbits := orbits;
+	    our_sats := sats;
 	    ignore (redraw_all ());
 	    install_timeout_handler ();
 	end;
