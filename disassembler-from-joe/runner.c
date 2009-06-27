@@ -257,17 +257,23 @@ print_vec (vector_t v)
 }
 
 static vector_t
-get_speed (machine_state_t *state)
+get_speed_generic (machine_state_t *state, get_pos_func_t get_pos_func)
 {
     machine_state_t copy = *state;
-    vector_t old = get_pos(state);
+    vector_t old = get_pos_func(state);
     vector_t new;
 
     timestep(&copy);
 
-    new = get_pos(&copy);
+    new = get_pos_func(&copy);
 
     return v_sub(new, old);
+}
+
+static vector_t
+get_speed (machine_state_t *state)
+{
+    return get_speed_generic(state, get_pos);
 }
 
 static vector_t
