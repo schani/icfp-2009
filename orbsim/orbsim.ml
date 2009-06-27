@@ -10,7 +10,9 @@
 
 open GMain
 
-
+(*
+let diewoed = Cairo_png.image_surface_create_from_file "/tmp/erde.png"
+*)
 
 let earth_r = 6357000.0
 let moon_r =  173600.0 (* mycrometer genau! *)
@@ -19,12 +21,14 @@ let initial_speed = 10
 let pi = atan 1. *. 4.0;;
 let two_pi = pi *. 2.0;;
 
+let rgb_white =   1.0, 1.0, 1.0
 let rgb_red =     1.0, 0.0, 0.0
 let rgb_green =   0.0, 1.0, 0.0
 let rgb_blue =    0.0, 0.0, 1.0
 let rgb_yellow =  1.0, 1.0, 0.0
 let rgb_cyan =    0.0, 1.0, 1.0
 let rgb_magenta = 1.0, 0.0, 1.0
+let rgb_black =   0.0, 0.0, 0.0
 
 let our_x = ref 0.0
 let our_y = ref 0.0
@@ -32,7 +36,9 @@ let our_orbits = ref []
 let our_sats = ref []
 let our_moons = ref []
 
-let our_history : (float * float) list ref = ref []
+let our_history :(float * float) list ref = ref []
+let our_sats_histories :(float * float) list array =
+  [| []; []; []; []; []; []; []; []; []; []; []; []; |]
 
 (* 0,0 is always in middle of screen (coords of earth) *)
 type space_screen = {
@@ -152,6 +158,9 @@ let show_trace ?(color=rgb_cyan) surface spasc points =
   paint_trace ~color surface
     (List.map (fun (x,y) -> (ccx spasc x), (ccy spasc y)) points)
 
+let show_traces ?(color=rgb_cyan) surface spasc traces =
+  Array.iter (fun points -> show_trace ~color surface spasc points) traces
+
 let show_orbit ?(color=rgb_yellow) surface spasc r =
   set_color surface color;
   paint_circle surface spasc (ccx spasc 0.0) (ccy spasc 0.0) (vc spasc r)
@@ -259,7 +268,12 @@ let make_orbit_window () =
 	  show_orbits surface spasc !our_orbits;
 	  show_sats surface spasc ~color:rgb_cyan !our_sats;
 	  show_sat surface spasc !our_x !our_y;
-	  show_trace surface spasc !our_history;
+	  show_trace surface ~color:rgb_white spasc !our_history;
+	  show_traces surface spasc our_sats_histories;
+	  (*
+	  Cairo.set_source_surface surface diewoed 10.0 100.0;
+	  Cairo.paint surface;
+	  *)
 	  d#put_pixmap ~x:0 ~y:0 ~xsrc:0 ~ysrc:0
 	    ~width:da_width ~height:da_height pixmap#pixmap;
 	  false
@@ -268,12 +282,29 @@ let make_orbit_window () =
 	if !playing then begin
 	  let stamp, score, fuel, x, y, orbits, sats, moons, rem =
 	    q.Vmbridge.step spasc.speed;
+	  in let rec record_more_traces ?(i=0) = function
+		[] -> ()
+	    | (x, y) :: r ->
+		let old_x, old_y =
+		  try
+		    List.hd our_sats_histories.(i)
+		  with
+		      _ -> x +. 1.0, y
+		in
+		  if ((int_of_float old_x) <> (int_of_float x)) or
+		  ((int_of_float old_y) <> (int_of_float y)) then begin
+		    if (old_x <> 0.0) && (old_y <> 0.0) then
+		      our_sats_histories.(i) <-
+			(x, y) :: our_sats_histories.(i)
+		  end;
+		  record_more_traces ~i:(i+1) r
 	  in
 	    if ((int_of_float !our_x) <> (int_of_float x)) or
 	      ((int_of_float !our_y) <> (int_of_float y)) then begin
 		if (!our_x <> 0.0) && (!our_y <> 0.0) then
 		  our_history := (!our_x, !our_y) :: !our_history;
 	      end;
+	    record_more_traces sats;
 	    update_status_line
 	      (Printf.sprintf "[%i] Score=%f Fuel=%f x=%f y=%f | %s"
 		 stamp score fuel x y rem);
@@ -313,10 +344,15 @@ let make_orbit_window () =
 		mouse_coords := mx, my;
 		left_pressed := true;
 		true
+	  | `BUTTON_PRESS ->
+	      Printf.fprintf stderr "MOUSE PRESS %i\n"
+		(GdkEvent.Button.button ev); flush stderr;
+	      false
 	  | `BUTTON_RELEASE when GdkEvent.Button.button ev = 1 ->
 	      left_pressed := false;
-	      true;
+	      true
 	  | _ ->
+	      Printf.fprintf stderr "llllllllllll so a sau\n"; flush stderr;
 	      false
        and mmove_callback ev =
 	let mx = GdkEvent.Motion.x ev
@@ -340,10 +376,23 @@ let make_orbit_window () =
 	      false
 	  else
 	    false
+       and scroll_callback ev =
+	match GdkEvent.get_type ev with
+	  | `SCROLL ->(*
+	      Printf.fprintf stderr "scroller heusler at %f, %f\n"
+		(GdkEvent.Scroll.x ev) (GdkEvent.Scroll.y ev);
+	      flush stderr; *)
+	      if GdkEvent.Scroll.direction ev = `UP then
+		zoomer#set_value (zoomer#value +. 1.0);
+	      if GdkEvent.Scroll.direction ev = `DOWN then
+		zoomer#set_value (zoomer#value -. 1.0);
+	      true
+	  | _ -> false
     in
       ignore (da#event#connect#expose ~callback:redraw_all);
       ignore (da#event#connect#button_press mbutton_callback);
       ignore (da#event#connect#button_release mbutton_callback);
+      ignore (da#event#connect#scroll scroll_callback);
       ignore (da#event#connect#motion_notify mmove_callback);
       da#event#add [`BUTTON_PRESS; `BUTTON_RELEASE; `BUTTON_MOTION];
       ignore (bplay#connect#clicked ~callback:
