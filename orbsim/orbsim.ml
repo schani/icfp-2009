@@ -86,7 +86,7 @@ let prev_screen_width = ref 0
 
 let resize_screen spasc height width =
   if (height <> !prev_screen_height) or (width <> !prev_screen_width) then begin
-    Printf.fprintf stderr "resize_screen\n"; flush stderr;
+(*    Printf.fprintf stderr "resize_screen\n"; flush stderr; *)
     spasc.screen_height <- height; 
     spasc.screen_width <- width;
     spasc_recalc spasc
@@ -159,10 +159,6 @@ let show_sat ?(color=rgb_red) surface spasc x y =
 
 let show_earth surface spasc =
   set_color surface rgb_green;
-  Printf.fprintf stderr "painting earth to space %f, %f [%f] on tft %f, %f [%f]\n"
-    0.0 0.0 earth_r (ccx spasc 0.0) (ccy spasc 0.0) (vc spasc earth_r);
-  spasc_dump spasc;
-  flush stderr;
   paint_filled_circle surface spasc (ccx spasc 0.0) (ccy spasc 0.0) (vc spasc earth_r)
 
 let create_space surface spasc =
@@ -233,7 +229,7 @@ let make_orbit_window () =
     in let redraw_all _ =
       let da_width, da_height = Gdk.Drawable.get_size (da#misc#window)
       in let pixmap = GDraw.pixmap ~width:da_width ~height:da_height ()
-      in 
+      in
 	spasc_refocus spasc;
 	resize_screen spasc da_width da_height;
 	ignore (w#connect#destroy GMain.quit);
@@ -287,8 +283,49 @@ let make_orbit_window () =
 	  playing := false;
 	  !remove_timeout ()
 	end
+    in let left_pressed = ref false
+       and mouse_coords = ref (0.0, 0.0)
+    in let mbutton_callback ev =
+	match GdkEvent.get_type ev with
+	    `BUTTON_PRESS when GdkEvent.Button.button ev = 1 ->
+	      let mx, my = GdkEvent.Button.x ev, GdkEvent.Button.y ev
+	      in
+		mouse_coords := mx, my;
+		left_pressed := true;
+		true
+	  | `BUTTON_RELEASE when GdkEvent.Button.button ev = 1 ->
+	      left_pressed := false;
+	      true;
+	  | _ ->
+	      false
+       and mmove_callback ev =
+	let mx = GdkEvent.Motion.x ev
+	and my = GdkEvent.Motion.y ev
+	in
+	  if !left_pressed then
+	    let oldx, oldy = !mouse_coords
+	    in
+	      if mx <> oldx or my <> oldy then
+		begin
+		  spasc.spaceview_x1 <-
+		    spasc.spaceview_x1 +. (oldx -. mx) *.
+		    (spasc.zoom /. (float_of_int spasc.screen_width));
+		  spasc.spaceview_y1 <-
+		    spasc.spaceview_y1 +. (oldy -. my) *.
+		    (spasc.zoom /. (float_of_int spasc.screen_height));
+		  mouse_coords := mx, my;
+		  spasc_refocus spasc;
+		  refresh_da da;
+		end;
+	      false
+	  else
+	    false
     in
       ignore (da#event#connect#expose ~callback:redraw_all);
+      ignore (da#event#connect#button_press mbutton_callback);
+      ignore (da#event#connect#button_release mbutton_callback);
+      ignore (da#event#connect#motion_notify mmove_callback);
+      da#event#add [`BUTTON_PRESS; `BUTTON_RELEASE; `BUTTON_MOTION];
       ignore (bplay#connect#clicked ~callback:
 		(function () ->
 		   if !playing then stop_playing () else start_playing ()));
