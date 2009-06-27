@@ -137,6 +137,32 @@ def op_args(op):
 	else:
 		raise Exception('Unknown opcode %s' % op[0])
 
+def alu_op_symbol(name):
+	if name == 'add':
+		return '+'
+	elif name == 'sub':
+		return '-'
+	elif name == 'mult':
+		return '*'
+	elif name == 'div':
+		return '/'
+	else:
+		raise Exception('Unknown alu op %s' % name)
+
+def cmp_op_name(name):
+	if name == 'ltz':
+		return '<'
+	elif name == 'lez':
+		return '<='
+	elif name == 'eqz':
+		return '=='
+	elif name == 'gez':
+		return '>='
+	elif name == 'gtz':
+		return '>'
+	else:
+		raise Exception('Unknown cmp op %s' % name)
+
 def var_name(addr):
 	return 'v%s' % addr
 
@@ -171,7 +197,8 @@ class Decompiler (CodeCollector):
 		op = self.code[addr]
 		if op[0] == 'alu':
 			return '%s %s %s' % \
-			      (self.var_or_const(op[2], True), op[1], self.var_or_const(op[3], True))
+			      (self.var_or_const(op[2], True), alu_op_symbol(op[1]), \
+			       self.var_or_const(op[3], True))
 		elif op[0] == 'output':
 			return '%s' % self.var_or_const(op[2])
 		elif op[0] == 'sqrt':
@@ -218,7 +245,7 @@ class Decompiler (CodeCollector):
 				phi = self.code[addr+1]
 				if phi[0] != 'phi':
 					raise Exception('Schweinerei')
-				print 'if %s %s 0:' % (self.var_or_const(op[2], True), op[1])
+				print 'if %s %s 0:' % (self.var_or_const(op[2], True), cmp_op_name(op[1]))
 				print '    %s = %s' % (var_name(addr+1), self.var_or_const(phi[1]))
 				print 'else:'
 				print '    %s = %s' % (var_name(addr+1), self.var_or_const(phi[2]))
