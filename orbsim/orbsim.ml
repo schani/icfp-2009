@@ -1,8 +1,15 @@
 (* orbsim: simulates the orbit
 *)
+
+(* TODO:
+   + fadenkreuz wenn erde zu klein
+
+*)
+
 open GMain
 
-let space_earth_r = 6357000.0
+let earth_r = 6357000.0
+let initial_zoom = 4.0
 let pi = atan 1. *. 4.;;
 let two_pi = atan 1. *. 8.;;
 
@@ -60,13 +67,16 @@ let paint_circle surface spasc x y r =
 
 let paint_earth surface spasc =
   Cairo.set_source_rgb surface 0.0 1.0 0.0;
-  paint_circle surface spasc 0.0 0.0 space_earth_r
+  paint_circle surface spasc 0.0 0.0 earth_r
 
 let create_space surface spasc =
   paint_earth surface spasc
 
+let refresh_da da =
+  GtkBase.Widget.queue_draw da#as_widget
+
 let make_orbit_window () =
-  let spasc = { zoom = space_earth_r *. 2.0;
+  let spasc = { zoom = earth_r *. initial_zoom;
 		screen_height = 500;
 		screen_width = 500;
 		screen_min = 500.0;
@@ -74,31 +84,47 @@ let make_orbit_window () =
 		screen_y_pre = 0.0
 	      }
   in let w = GWindow.window ~height:500 ~width:500 ()
-  in let vbox = GPack.vbox ~packing:w#add ()
-  in let da = GMisc.drawing_area ~packing:vbox#add ()
+  in let vbox = GPack.vbox ~packing:w#add ~homogeneous:false ()
+  in let da = GMisc.drawing_area ~packing:(vbox#pack ~expand:true) ()
+  in let statusbox = GPack.hbox ~packing:(vbox#pack ~expand:false) ()
+  in let _ = GMisc.label ~text:"Zoom:"
+      ~packing:(statusbox#pack ~expand:false) ()
+  in let zoomer = GData.adjustment ~value:initial_zoom ~lower:1.0
+      ~upper:100000.0 ~step_incr:1.0 ~page_incr:50.0 ~page_size:1.0 ()
   in
-    da#misc#realize ();
-    let d = new GDraw.drawable (da#misc#window)
+    ignore (zoomer#connect#value_changed
+	      (fun () ->
+		 spasc.zoom <- zoomer#value *. earth_r; refresh_da da));
+    ignore (GEdit.spin_button ~adjustment:zoomer ~rate:0. ~digits:5 ~width:75 
+	      ~packing:statusbox#pack ());
+    let _ = GMisc.label ~text:"Fuel:"
+      ~packing:(statusbox#pack ~expand:false) ()
+    in let label_fuel = GMisc.label ~text:"???"
+	~packing:(statusbox#pack ~expand:false) ()
+    in let _ = GMisc.label ~text:"" ~packing:(statusbox#pack ~expand:true) ()
     in
-    let expose_event _ =
-      let da_width, da_height = Gdk.Drawable.get_size (da#misc#window)
-      in let pixmap = GDraw.pixmap ~width:da_width ~height:da_height ()
+      da#misc#realize ();
+      let d = new GDraw.drawable (da#misc#window)
       in
-	recalc_screen spasc da_width da_height;
-	ignore (w#connect#destroy GMain.quit);
-	pixmap#set_foreground (`NAME "blue");
-	pixmap#rectangle ~x:0 ~y:0 ~width:da_width ~height:da_height
-	  ~filled:true ();
-	let surface = (surface_from_gdk_pixmap pixmap#pixmap)
+      let expose_event _ =
+	let da_width, da_height = Gdk.Drawable.get_size (da#misc#window)
+	in let pixmap = GDraw.pixmap ~width:da_width ~height:da_height ()
 	in
-	  paint_earth surface spasc;
-	  d#put_pixmap ~x:0 ~y:0 ~xsrc:0 ~ysrc:0
-	    ~width:da_width ~height:da_height pixmap#pixmap;
-	  false
-    in
-      ignore (da#event#connect#expose ~callback:expose_event);
-      w#show ();
-      GMain.Main.main ()
+	  recalc_screen spasc da_width da_height;
+	  ignore (w#connect#destroy GMain.quit);
+	  pixmap#set_foreground (`NAME "blue");
+	  pixmap#rectangle ~x:0 ~y:0 ~width:da_width ~height:da_height
+	    ~filled:true ();
+	  let surface = (surface_from_gdk_pixmap pixmap#pixmap)
+	  in
+	    paint_earth surface spasc;
+	    d#put_pixmap ~x:0 ~y:0 ~xsrc:0 ~ysrc:0
+	      ~width:da_width ~height:da_height pixmap#pixmap;
+	    false
+      in
+	ignore (da#event#connect#expose ~callback:expose_event);
+	w#show ();
+	GMain.Main.main ()
 
 let _ =
   ignore (GMain.init ());
