@@ -98,6 +98,25 @@ let vc spasc value =
 let surface_from_gdk_pixmap gdkpixmap =
   Cairo_lablgtk.create gdkpixmap
 
+let set_color surface (r,g,b) =
+  Cairo.set_source_rgb surface r g b
+
+let paint_trace ?(color=rgb_cyan) surface points =
+  let rec worker = function
+    [] ->
+      Cairo.stroke surface
+    | (x,y) :: ps ->
+	Cairo.line_to surface x y;
+	worker ps
+  in
+    match points with
+	[] -> ()
+      | (x,y) :: ps ->
+	  set_color surface color;
+	  Cairo.move_to surface x y;
+	  worker ps;
+	  Cairo.stroke surface
+
 let paint_line surface x1 y1 x2 y2 =
   Cairo.move_to surface x1 y1;
   Cairo.line_to surface x2 y2;
@@ -115,8 +134,9 @@ let paint_circle surface spasc x y r =
   Cairo.arc surface x y r 0. two_pi;
   Cairo.stroke surface
 
-let set_color surface (r,g,b) =
-  Cairo.set_source_rgb surface r g b
+let show_trace ?(color=rgb_cyan) surface spasc points =
+  paint_trace ~color surface
+    (List.map (fun (x,y) -> (ccx spasc x), (ccy spasc y)) points)
 
 let show_orbit ?(color=rgb_yellow) surface spasc r =
   set_color surface color;
@@ -194,7 +214,7 @@ let make_orbit_window () =
     da#misc#realize ();
     let q = if Array.length Sys.argv > 1 then
       Vmbridge.setup_file Sys.argv.(1)
-    else 
+    else
       failwith "biely mode not yet active.."
     in let d = new GDraw.drawable (da#misc#window)
     in let redraw_all _ =
@@ -211,8 +231,7 @@ let make_orbit_window () =
 	  show_earth surface spasc;
 	  show_orbit surface spasc !our_target_orbit;
 	  show_sat surface spasc !our_x !our_y;
-	  List.iter (fun (x,y) -> show_sat surface ~color:rgb_cyan spasc x y)
-	    !our_history;
+	  show_trace surface spasc !our_history;
 	  d#put_pixmap ~x:0 ~y:0 ~xsrc:0 ~ysrc:0
 	    ~width:da_width ~height:da_height pixmap#pixmap;
 	  false
@@ -221,7 +240,11 @@ let make_orbit_window () =
 	if !playing then begin
 	  let stamp, score, fuel, x, y, orbit = q.Vmbridge.step spasc.speed;
 	  in
-	    our_history := (!our_x, !our_y) :: !our_history;
+	    if ((int_of_float !our_x) <> (int_of_float x)) or
+	      ((int_of_float !our_y) <> (int_of_float y)) then begin
+		if (!our_x <> 0.0) && (!our_y <> 0.0) then
+		  our_history := (!our_x, !our_y) :: !our_history;
+	      end;
 	    our_x := x;
 	    our_y := y;
 	    our_target_orbit := orbit;
