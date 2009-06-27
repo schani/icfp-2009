@@ -606,7 +606,7 @@ timestep_until_angle_delta (machine_state_t *state, double angle_delta, double m
 
     g_assert(angle_delta >= 0.0);
 
-    if (dest_angle > 2.0 * G_PI)
+    if (dest_angle > G_PI)
 	dest_angle -= 2.0 * G_PI;
 
     return timestep_until_angle(state, dest_angle, max_dist, have_angle);
