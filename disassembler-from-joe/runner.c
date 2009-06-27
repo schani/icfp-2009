@@ -104,6 +104,13 @@ clear_dump_orbit (void)
     dump_orbit = -1;
 }
 
+/* Format of dump file:
+ *
+ * <time> <score> <fuel> <our-x> <our-y> <number-or-orbits> <number-of-satellites> <number-of-moons>
+ * <orbit-0> <orbit-1> ... <orbit-n-1>
+ * <sat-0-x> <sat-0-y> <sat-1-x> <sat-1-y> ... <sat-m-1-x> <sat-m-1-y>
+ * <moon-0-x> <moon-0-y> <moon-1-x> <moon-1-y> ... <moon-k-1-x> <moon-k-1-y>
+ */
 #if defined(BIN1)
 static void
 print_timestep (machine_state_t *state)
@@ -826,6 +833,8 @@ main (int argc, char *argv[])
     inject_circular_to_elliptical(&global_state, v_abs(sat_apogee), 1.0);
 
     clear_dump_orbit();
+#elif defined(BIN4)
+    /* nix */
 #else
 #error bla
 #endif
