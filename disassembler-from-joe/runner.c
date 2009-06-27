@@ -13,7 +13,18 @@ static const vector_t v_zero = { 0.0, 0.0 };
 typedef void (*compare_init_func_t) (guint32 n, gpointer user_data);
 typedef void (*set_new_value_func_t) (guint32 addr, double new_value, gpointer user_data);
 
-#include "out.c"
+#if defined(BIN1)
+#define SCENARIO	1001
+#include "bin1.c"
+#elif defined(BIN2)
+#define SCENARIO	2001
+#include "bin2.c"
+#elif defined(BIN3)
+#define SCENARIO	3003
+#include "bin3.c"
+#else
+#error bla
+#endif
 
 FILE *dump_file = NULL;
 FILE *global_trace = NULL;
@@ -67,22 +78,34 @@ write_timestep (FILE *trace, machine_inputs_t *old, machine_inputs_t *new)
     compare_inputs(old, new, write_count_func, write_value_func, trace);
 }
 
+#if defined(BIN1)
 static void
 print_timestep (machine_state_t *state)
 {
-    double sx = state->output[2];
-    double sy = state->output[3];
+    double sx = -state->output[2];
+    double sy = -state->output[3];
 
     if (dump_file != NULL)
-	fprintf(dump_file, "%d %f %f %f %f %f %f\n", global_iter, state->output[0], state->output[1],
+	fprintf(dump_file, "%d %f %f %f %f 1 0 %f %f\n", global_iter, state->output[0], state->output[1],
 		sx, sy, state->output[4], sqrt(sx * sx + sy * sy));
-
-    /*
-	fprintf(dump_file, "%d %f %f %f %f %f\n", global_iter, state->output[0], sx, sy, state->output[4],
-	sqrt(sx * sx + sy * sy));
-    */
-
 }
+#elif defined(BIN2) || defined(BIN3)
+static void
+print_timestep (machine_state_t *state)
+{
+    double sx = -state->output[2];
+    double sy = -state->output[3];
+
+    double dx = state->output[4];
+    double dy = state->output[5];
+
+    if (dump_file != NULL)
+	fprintf(dump_file, "%d %f %f %f %f 0 1 %f %f %f\n", global_iter, state->output[0], state->output[1],
+		sx, sy, sx + dx, sy + dy, sqrt(sx * sx + sy * sy));
+}
+#else
+#error bla
+#endif
 
 static void
 global_timestep (void)
@@ -238,6 +261,15 @@ set_thrust (machine_state_t *state, vector_t thrust)
     state->inputs.input_3 = thrust.y;
 }
 
+static void
+do_n_timesteps (machine_state_t *state, int num_iters)
+{
+    for (int i = 0; i < num_iters; ++i) {
+	do_timestep(state);
+	set_thrust(state, v_zero);
+    }
+}
+
 static double
 calc_apogee (machine_state_t *state, vector_t thrust, double max_dist, int *num_iters)
 {
@@ -268,6 +300,52 @@ calc_apogee (machine_state_t *state, vector_t thrust, double max_dist, int *num_
 	}
 
 	++i;
+    }
+}
+
+static void
+calc_ellipse (machine_state_t *state, vector_t *apogee, vector_t *perigee, int *t_to_apogee, int *t_to_perigee)
+{
+    machine_state_t copy = *state;
+    double dist = distance_from_earth(&copy);
+    gboolean ascending;
+    gboolean have_apogee = FALSE, have_perigee = FALSE;
+    vector_t pos;
+    int iter = 0;
+
+    timestep(&copy);
+    ++iter;
+    set_thrust(&copy, v_zero);
+
+    ascending = distance_from_earth(&copy) > dist;
+    pos = get_pos(&copy);
+    dist = distance_from_earth(&copy);
+
+    while (!have_apogee || !have_perigee) {
+	gboolean new_ascending;
+
+	timestep(&copy);
+	new_ascending = distance_from_earth(&copy) > dist;
+
+	if (new_ascending != ascending) {
+	    if (ascending) {
+		g_assert(!have_apogee);
+		have_apogee = TRUE;
+		*apogee = pos;
+		*t_to_apogee = iter;
+	    } else {
+		g_assert(!have_perigee);
+		have_perigee = TRUE;
+		*perigee = pos;
+		*t_to_perigee = iter;
+	    }
+	}
+
+	ascending = new_ascending;
+	dist = distance_from_earth(&copy);
+	pos = get_pos(&copy);
+
+	++iter;
     }
 }
 
@@ -496,8 +574,6 @@ inject_bielliptical_to_circular (machine_state_t *state, double dest_apogee, dou
     g_assert_not_reached();
 }
 
-#define SCENARIO	1001
-
 int
 main (int argc, char *argv[])
 {
@@ -518,9 +594,15 @@ main (int argc, char *argv[])
 
     global_timestep();
 
+#if defined(BIN1)
     dest_apogee = global_state.output[4];
 
     num_iters = inject_circular_to_elliptical(&global_state, dest_apogee, 1.0);
+
+#if 1
+    do_n_timesteps(&global_state, num_iters);
+    inject_elliptical_to_circular(&global_state, 1.0, dest_apogee, 900, 1.0);
+#else
     // thrust more
     set_thrust(&global_state, v_mul_scal(get_thrust(&global_state), 1.25));
     timestep_until_angle(&global_state, G_PI, dest_apogee * 100.0, &have_angle);
@@ -528,13 +610,6 @@ main (int argc, char *argv[])
 	g_print("don't have angle\n");
 	return 1;
     }
-
-    /*
-    for (i = 0; i < num_iters; ++i) {
-	global_timestep();
-	set_thrust(&global_state, v_zero);
-    }
-    */
 
     num_iters = inject_bielliptical_to_circular(&global_state, dest_apogee, 1.0);
     for (i = 0; i < num_iters; ++i) {
@@ -550,6 +625,25 @@ main (int argc, char *argv[])
 	set_thrust(&global_state, v_zero);
     }
     */
+#endif
+#elif defined(BIN2)
+    g_assert_not_reached();
+#elif defined(BIN3)
+
+    vector_t apogee, perigee;
+    int t_to_apogee, t_to_perigee;
+
+    calc_ellipse(&global_state, &apogee, &perigee, &t_to_apogee, &t_to_perigee);
+
+    g_print("t to apogee: %d  perigee: %d\n", t_to_apogee, t_to_perigee);
+    g_print("apogee ");
+    print_vec(apogee);
+    g_print("   perigee ");
+    print_vec(perigee);
+    g_print("\n");
+#else
+#error bla
+#endif
 
     while (global_iter < 3000000 && global_state.output[0] == 0.0) {
 	global_timestep();
