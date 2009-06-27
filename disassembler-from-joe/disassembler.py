@@ -369,7 +369,7 @@ while 1:
 	if op1 == 0:
 		op2 = (i & 0xf000000) >> 24
 		imm = (i & 0xffc000) >> 14
-		cmpop = (i & 0xf00000) >> 20
+		cmpop = (i >> 21) & 0x7
 		r1 = (i & 0x3fff)
 
 		if op2 == 0:
