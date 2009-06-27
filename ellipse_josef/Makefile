@@ -3,14 +3,14 @@
 DISTNAME = 
 BINFILES = $(DISTNAME)
 SBINFILES =
-LIBFILES = hohmann
-LIBCOMPS-hohmann = hohmann
+LIBFILES = ellipsen 
+LIBCOMPS-ellipsen = hohmann bielliptic
 DOCFILES = COPYING LICENSE CHANGELOG VERSION 
 OTHERFILES = $(DISTNAME).spec
 SRCFILES = $(shell echo *.ml *.mli *.mll *.mly) Makefile
 DISTFILES = $(DOCFILES) $(OTHERFILES) $(SRCFILES)
 DISTVERSIONFILES =
-MODULES = hohmann
+MODULES = hohmann bielliptic
 LIBRARIES =
 BINARIES = $(BINFILES) $(SBINFILES)
 DISTVERSION = $(shell cat VERSION)

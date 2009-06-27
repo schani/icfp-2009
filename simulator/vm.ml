@@ -294,6 +294,6 @@ let vm_execute m controller =
       loop (controller m)
   in
   let m = loop m in 
-  Printf.printf "muhkuh scored: %f\n" (vm_read_sensor m 0);
+  Printf.printf "muhkuh scored: %f in move %d\n" (vm_read_sensor m 0) m.timestep;
   m 
     

@@ -9,14 +9,19 @@
 
 open Vm
 
+let hohmannmode = `Hohmann
+let hohmannmode = `Bielliptic
+
 let get_aktuator = function 
-  | Vm.Hohmann -> Solve_hohman.aktuator
+  | Vm.Hohmann -> (match hohmannmode with 
+      | `Bielliptic -> Solve_bielyptic.aktuator
+      | `Hohmann ->  Solve_hohman.aktuator)
   | Vm.MeetAndGreet -> Solve_meetandgreet.aktuator
   | _ -> (fun x -> x)
 
 let get_configs = function
-  | Vm.Hohmann -> [1001;1002;1003;1004] 
-  | Vm.MeetAndGreet -> [2002] (*  [2001;2002;2003;2004]*)
+  | Vm.Hohmann -> [1001] (* ;1002;1003;1004] *)
+  | Vm.MeetAndGreet -> [2001] (*  [2001;2002;2003;2004]*)
   | _ -> failwith "not implementated"
 
 
@@ -37,8 +42,9 @@ let _ =
       let posy =   vm_read_sensor m 0x3 in
       let targetx = vm_read_sensor m 0x4 in
       let targety = vm_read_sensor m 0x5 in
-       Printf.printf "%08d %08.8f %08.8f %08.8f %08.8f\n" 
-	 m.timestep (-.posx) (-.posy) (targetx-.posx) (targety-.posy); 
+      (* Printf.printf "%08d %08.8f %08.8f %08.8f %08.8f\n" 
+	m.timestep (-.posx) (-.posy) (targetx-.posx) (targety-.posy); *)
+      (* Printf.printf "fuel %0f\n" fuel; *)
       m
     ) in
     let visualisierer = (fun m -> m) in
@@ -55,7 +61,7 @@ let _ =
   let rec loop = function 
     | [] -> 0
     | x::xs -> 
-	Printf.printf "running %d: " x;
+	Printf.fprintf stderr "running %d: \n" x;
 	flush stdout;
 	doit problem x; loop xs
   in
