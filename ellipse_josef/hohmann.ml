@@ -81,7 +81,7 @@ let erster_schub sx sy zielradius gguhrzeiger =
 
 let zweiter_schub sx sy zielradius gguhrzeiger =
   let startradius = radius sx sy in
-  let alpha = ((winkel sx sy) +. (gguhrzeiger *. (pi /. 2.0)))
+  let alpha = ((winkel sx sy) +. ((0.0 -. gguhrzeiger) *. (pi /. 2.0)))
   in
   vektor (delta_v_prime startradius zielradius) alpha;;
 
@@ -122,10 +122,12 @@ let hohmann sx1 sy1 sx2 sy2 zielradius =
   (
     (erster_schub  (to_our sx2) (to_our sy2) zielradius rich),
     (zweiter_schub  (to_our sx2) (to_our sy2) zielradius rich),
-    (zeitbedarf (to_our sx2) (to_our sy2) zielradius)
+    (zeitbedarf (to_our sx2) (to_our sy2) zielradius),
+(zweiterpunkt (to_our sx2) (to_our sy2) zielradius)
 );;
 
-(*
+
 hohmann (-6556995.342903) 7814.930000 (-6556981.371618) 15629.848899
   42164000.000000;;
-*)
+
+
