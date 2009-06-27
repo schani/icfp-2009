@@ -41,4 +41,16 @@ let output_frame oc (timestep,liste) =
 	  outputf oc value;
 	  loop xs
     in loop liste
+
+let output_end_of_submission oc timestep = 
+  output_frame oc (timestep,[])
+
+let open_submission filename teamnumber config = 
+  let oc = open_out_bin filename in
+  output_header oc teamnumber config;
+  oc
+
+
+let close_submission oc = 
+  close_out oc
   

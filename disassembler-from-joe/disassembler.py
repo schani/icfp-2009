@@ -268,38 +268,68 @@ class CGenerator (CodeCollector):
 	def __init__(self):
 		CodeCollector.__init__(self)
 
-	def gen_inits(self):
-		port_max = -1
+	def gen_struct(self):
+		self.port_max = -1
 		self.inputs = set([])
+		self.vars = set([])
 		for addr in range(len(self.code)):
 			op = self.code[addr]
 			if op[0] == 'input':
 				self.inputs.add(op[1])
 			if op[0] == 'output':
-				port_max = max(port_max, op[1])
+				self.port_max = max(self.port_max, op[1])
 			elif  op[0] == 'cmpz':
 				pass
 			else:
-				print 'double %s = %g;' % (var_name(addr), self.mem[addr])
+				self.vars.add(addr)
+
+		print 'typedef struct {'
 		for input in self.inputs:
-			print 'double input_%d = 0.0;' % input
-		print 'double output[%d];' % (port_max+1)
-		print 'int iter = 0;'
-		print 'for (int i = 0; i < %d; ++i) output[i] = 0.0;' % (port_max+1)
+			print 'double input_%d;' % input
+		print '} machine_inputs_t;'
+
+		print 'typedef struct {'
+		for addr in self.vars:
+			print 'double %s;' % var_name(addr)
+		print 'double output[%d];' % (self.port_max+1)
+		print 'machine_inputs_t inputs;'
+		print '} machine_state_t;'
+
+		print 'void compare_inputs (machine_inputs_t *old, machine_inputs_t *new, compare_init_func_t init, set_new_value_func_t set, gpointer user_data) {'
+		print 'guint32 count = 0;'
+		for input in self.inputs:
+			print 'if (old->input_%d != new->input_%d) ++count;' % (input, input)
+		print 'init(count, user_data);'
+		for input in self.inputs:
+			print 'if (old->input_%d != new->input_%d) set(%d, new->input_%d, user_data);' % (input, input, input, input)
+		print '}'
+
+	def gen_inits(self):
+		print 'void init_machine (machine_state_t *state) {'
+		for addr in self.vars:
+			print 'unsigned char %s_mem[] = {' % var_name(addr)
+			for c in struct.pack("d", self.mem[addr]):
+				print '0x%02X,' % ord(c)
+			print '};'
+			print 'state->%s = *(double*)%s_mem;' % (var_name(addr), var_name(addr))
+		for input in self.inputs:
+			print 'state->inputs.input_%d = 0.0;' % input
+		print 'for (int i = 0; i < %d; ++i) state->output[i] = 0.0;' % (self.port_max+1)
+		print '}'
 
 	def gen_loop(self):
-		print 'while (iter++ < 3000000 && output[0] == 0.0) {'
+		print 'void timestep (machine_state_t *state) {'
 		addr = 0
 		while addr < len(self.code):
 			op = self.code[addr]
 			#print 'decompiling insn %d: %s' % (addr, op)
 			if op[0] == 'alu':
 				if op[1] == 'div':
-					print '%s = (%s == 0.0) ? 0.0 : (%s / %s);' % (var_name(addr), var_name(op[3]), var_name(op[2]), var_name(op[3]))
+					print 'state->%s = (state->%s == 0.0) ? 0.0 : (state->%s / state->%s);' % (var_name(addr), var_name(op[3]), var_name(op[2]), var_name(op[3]))
 				else:
-					print '%s = %s %s %s;' % (var_name(addr), var_name(op[2]), alu_op_symbol(op[1]), var_name(op[3]))
+					print 'state->%s = state->%s %s state->%s;' % (var_name(addr), var_name(op[2]), alu_op_symbol(op[1]), var_name(op[3]))
 			elif op[0] == 'output':
-				print 'output[%d] = %s;' % (op[1], var_name(op[2]))
+				print 'state->output[%d] = state->%s;' % (op[1], var_name(op[2]))
 			elif op[0] == 'phi':
 				raise Exception('Schweinerei')
 			elif op[0] == 'noop':
@@ -308,18 +338,18 @@ class CGenerator (CodeCollector):
 				phi = self.code[addr+1]
 				if phi[0] != 'phi':
 					raise Exception('Schweinerei')
-				print 'if (%s %s 0.0)' % (var_name(op[2]), cmp_op_name(op[1]))
-				print '    %s = %s;' % (var_name(addr+1), var_name(phi[1]))
+				print 'if (state->%s %s 0.0)' % (var_name(op[2]), cmp_op_name(op[1]))
+				print '    state->%s = state->%s;' % (var_name(addr+1), var_name(phi[1]))
 				print 'else'
-				print '    %s = %s;' % (var_name(addr+1), var_name(phi[2]))
+				print '    state->%s = state->%s;' % (var_name(addr+1), var_name(phi[2]))
 				op = phi
 				addr += 1
 			elif op[0] == 'sqrt':
-				print '%s = sqrt(%s);' % (var_name(addr), var_name(op[1]))
+				print 'state->%s = sqrt(state->%s);' % (var_name(addr), var_name(op[1]))
 			elif op[0] == 'copy':
-				print '%s = %s;' % (var_name(addr), var_name(op[1]))
+				print 'state->%s = state->%s;' % (var_name(addr), var_name(op[1]))
 			elif op[0] == 'input':
-				print '%s = input_%d;' % (var_name(addr), op[1])
+				print 'state->%s = state->inputs.input_%d;' % (var_name(addr), op[1])
 			else:
 				raise Exception('Unknown opcode %s' % op[0])
 			#if op[0] != 'noop' and op[0] != 'cmpz' and op[0] != 'output':
@@ -328,6 +358,7 @@ class CGenerator (CodeCollector):
 		print '}'
 
 	def finish(self):
+		self.gen_struct()
 		self.gen_inits()
 		self.gen_loop()
 
