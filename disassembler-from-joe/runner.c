@@ -659,9 +659,9 @@ main (int argc, char *argv[])
     calc_ellipse(&global_state, &apogee, &perigee, &t_to_apogee, &t_to_perigee);
 
     g_print("t to apogee: %d  perigee: %d\n", t_to_apogee, t_to_perigee);
-    g_print("apogee ");
+    g_print("apogee (%f) ", v_angle(apogee) / G_PI * 180.0);
     print_vec(apogee);
-    g_print("   perigee ");
+    g_print("   perigee (%f) ", v_angle(perigee) / G_PI * 180.0);
     print_vec(perigee);
     g_print("\n");
 #else
