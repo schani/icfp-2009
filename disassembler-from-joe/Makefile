@@ -7,3 +7,6 @@ asms :
 
 runner : runner.c out.c
 	gcc -o runner -g -Wall -std=c99 runner.c -lm `pkg-config --cflags --libs glib-2.0`
+
+out.c : disassembler.py
+	./disassembler.py -c < ../angabe/bin1.obf > out.c
