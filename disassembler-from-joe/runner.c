@@ -135,9 +135,10 @@ set_thrust (machine_state_t *state, vector_t thrust)
 }
 
 static double
-calc_apogee (machine_state_t *state, vector_t thrust, double max_dist)
+calc_apogee (machine_state_t *state, vector_t thrust, double max_dist, int *num_iters)
 {
     machine_state_t copy = *state;
+    int i = 0;
 
     set_thrust(&copy, thrust);
 
@@ -150,15 +151,23 @@ calc_apogee (machine_state_t *state, vector_t thrust, double max_dist)
 	new_dist = distance_from_earth(&copy);
 	set_thrust(&copy, v_zero);
 
-	if (new_dist >= max_dist)
+	if (new_dist >= max_dist) {
+	    if (num_iters != NULL)
+		*num_iters = i;
 	    return max_dist;
+	}
 
-	if (new_dist <= old_dist)
+	if (new_dist <= old_dist) {
+	    if (num_iters != NULL)
+		*num_iters = i;
 	    return old_dist;
+	}
+
+	++i;
     }
 }
 
-static void
+static int
 inject_circular_to_elliptical (machine_state_t *state, double dest_apogee, double tolerance)
 {
     double min = 0, max = state->output[1];
@@ -177,18 +186,19 @@ inject_circular_to_elliptical (machine_state_t *state, double dest_apogee, doubl
     while (min < max) {
 	double middle = (min + max) / 2;
 	vector_t thrust = v_mul_scal(speed_norm, middle);
+	int num_iters;
 
 	g_print("trying thrust %f ", middle);
 	print_vec(thrust);
 	g_print("\n");
 
-	double apogee = calc_apogee(state, thrust, dest_apogee * 2.0);
+	double apogee = calc_apogee(state, thrust, dest_apogee * 2.0, &num_iters);
 
-	g_print("apogee is %f\n", apogee);
+	g_print("apogee is %f after %d iterations\n", apogee, num_iters);
 
 	if (fabs(apogee - dest_apogee) <= tolerance) {
 	    set_thrust(state, thrust);
-	    return;
+	    return num_iters;
 	}
 
 	if (apogee < dest_apogee)
@@ -196,6 +206,20 @@ inject_circular_to_elliptical (machine_state_t *state, double dest_apogee, doubl
 	else
 	    max = middle;
     }
+
+    g_assert_not_reached();
+}
+
+static void
+print_timestep (machine_state_t *state)
+{
+    double sx = state->output[2];
+    double sy = state->output[3];
+
+    printf("%d %f %f %f %f %f\n", iter, state->output[0], sx, sy, state->output[4],
+	   sqrt(sx * sx + sy * sy));
+
+    //printf("%d %f %f %f %f %f\n", iter, state.output[0], state.output[1], state.output[2], state.output[3], state.output[4]);
 }
 
 #define SCENARIO	1001
@@ -206,6 +230,8 @@ main (void)
     machine_state_t state;
     machine_inputs_t old_inputs;
     FILE *trace = open_trace_file("/tmp/trace", 19, SCENARIO);
+    int num_iters, i;
+    double dest_apogee;
 
     init_machine(&state);
     old_inputs = state.inputs;
@@ -216,8 +242,19 @@ main (void)
     write_timestep(trace, &old_inputs, &state.inputs);
 
     timestep(&state);
+    ++iter;
+    print_timestep(&state);
 
-    inject_circular_to_elliptical(&state, 80000000.0, 0.000001);
+    dest_apogee = state.output[4];
+
+    num_iters = inject_circular_to_elliptical(&state, dest_apogee, 0.000001);
+    for (i = 0; i < num_iters; ++i) {
+	timestep(&state);
+	++iter;
+	print_timestep(&state);
+
+	set_thrust(&state, v_zero);
+    }
 
     return 0;
 
