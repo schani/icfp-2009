@@ -2,29 +2,33 @@
  *)
 
 type q = {
-  mutable step :(unit -> int * float * float * float * float * float);
+  mutable step :(int -> int * float * float * float * float * float);
 }
 
 exception End_of_trace
 
 let q = {
-  step = function () -> 0, 0.0, 0.0, 0.0, 0.0, 0.0;
+  step = function _ -> 0, 0.0, 0.0, 0.0, 0.0, 0.0;
 }
 
 let setup_file filename =
   let ifi = open_in filename
-  in let step () =
-      try
-	Scanf.sscanf (input_line ifi) "%i %f %f %f %f %f"
-          (fun stamp score fuel x y muh -> stamp, score, fuel, x, y, muh)
-      with
-	  _ -> raise End_of_trace
+  in let rec step = function
+    | howmuch when howmuch > 1 -> (* skip some *)
+	ignore (input_line ifi);
+	step (howmuch - 1)
+    | _ ->
+	try
+	  Scanf.sscanf (input_line ifi) "%i %f %f %f %f %f"
+            (fun stamp score fuel x y muh -> stamp, score, fuel, x, y, muh)
+	with
+	    _ -> raise End_of_trace
   in
     q.step <- step;
     q
 
 let setup_signof () =
-  let step () =
+  let step howmuch =
     0, 0.0, 0.0, 0.0, 0.0, 0.0
   in
     q.step <- step;
