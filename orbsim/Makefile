@@ -10,7 +10,7 @@ SRCFILES = $(wildcard *.ml *.mli *.mll *.mly) Makefile Makefile.ocaml
 DISTFILES = $(DOCFILES) $(OTHERFILES) $(SRCFILES)
 DISTVERSIONFILES = 
 MODULES = vmbridge
-LIBRARIES = bigarray lablgtk cairo cairo_lablgtk vm
+LIBRARIES = str bigarray lablgtk cairo cairo_lablgtk vm
 DISTVERSION = 001
 #  $(shell cat VERSION)
 
