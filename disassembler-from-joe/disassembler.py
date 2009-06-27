@@ -264,8 +264,74 @@ class Decompiler (CodeCollector):
 		self.build_uses()
 		self.decompile()
 
+class CGenerator (CodeCollector):
+	def __init__(self):
+		CodeCollector.__init__(self)
+
+	def gen_inits(self):
+		port_max = -1
+		self.inputs = set([])
+		for addr in range(len(self.code)):
+			op = self.code[addr]
+			if op[0] == 'input':
+				self.inputs.add(op[1])
+			if op[0] == 'output':
+				port_max = max(port_max, op[1])
+			elif  op[0] == 'cmpz':
+				pass
+			else:
+				print 'double %s = %f;' % (var_name(addr), self.mem[addr])
+		for input in self.inputs:
+			print 'double input_%d = 0.0;' % input
+		print 'double output[%d];' % (port_max+1)
+		print 'for (int i = 0; i < %d; ++i) output[i] = 0.0;' % (port_max+1)
+
+	def gen_loop(self):
+		print 'while (output[0] == 0.0) {'
+		addr = 0
+		while addr < len(self.code):
+			op = self.code[addr]
+			#print 'decompiling insn %d: %s' % (addr, op)
+			if op[0] == 'alu':
+				if op[1] == 'div':
+					print '%s = (%s == 0.0) ? 0.0 : (%s / %s);' % (var_name(addr), var_name(op[3]), var_name(op[2]), var_name(op[3]))
+				else:
+					print '%s = %s %s %s;' % (var_name(addr), var_name(op[2]), alu_op_symbol(op[1]), var_name(op[3]))
+			elif op[0] == 'output':
+				print 'output[%d] = %s;' % (op[1], var_name(op[2]))
+			elif op[0] == 'phi':
+				raise Exception('Schweinerei')
+			elif op[0] == 'noop':
+				pass
+			elif op[0] == 'cmpz':
+				phi = self.code[addr+1]
+				if phi[0] != 'phi':
+					raise Exception('Schweinerei')
+				print 'if (%s %s 0.0)' % (var_name(op[2]), cmp_op_name(op[1]))
+				print '    %s = %s;' % (var_name(addr+1), var_name(phi[1]))
+				print 'else'
+				print '    %s = %s;' % (var_name(addr+1), var_name(phi[2]))
+				addr += 1
+			elif op[0] == 'sqrt':
+				print '%s = sqrt(%s);' % (var_name(addr), var_name(op[1]))
+			elif op[0] == 'copy':
+				print '%s = %s;' % (var_name(addr), var_name(op[1]))
+			elif op[0] == 'input':
+				print '%s = input_%d;' % (var_name(addr), op[1])
+			else:
+				raise Exception('Unknown opcode %s' % op[0])
+			addr += 1
+		print '}'
+
+	def finish(self):
+		self.gen_inits()
+		self.gen_loop()
+
+
 if len(sys.argv) > 1 and sys.argv[1] == "-d":
 	backend = CodeDisassembler()
+elif len(sys.argv) > 1 and sys.argv[1] == "-c":
+	backend = CGenerator()
 else:
 	backend = Decompiler()
 
