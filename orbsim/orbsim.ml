@@ -13,7 +13,7 @@ open GMain
 
 
 let earth_r = 6357000.0
-let initial_zoom = 7.0
+let initial_zoom = 10.0
 let initial_speed = 10
 let pi = atan 1. *. 4.0;;
 let two_pi = pi *. 2.0;;
@@ -69,9 +69,20 @@ let spasc_recalc spasc =
     spasc.screen_y_pre <- 0.0
   end
 
+let spasc_refocus spasc =
+  let xdiff = spasc.spaceview_width -. spasc.zoom
+  and ydiff = spasc.spaceview_height -. spasc.zoom
+  in
+    if xdiff <> 0.0 or xdiff <> 0.0 then begin
+      spasc.spaceview_x1 <- spasc.spaceview_x1 +. (xdiff /. 2.0);
+      spasc.spaceview_y1 <- spasc.spaceview_y1 +. (ydiff /. 2.0);
+      spasc.spaceview_width <- spasc.spaceview_width -. xdiff;
+      spasc.spaceview_height <- spasc.spaceview_height -. ydiff;
+      spasc_recalc spasc
+    end
+
 let prev_screen_height = ref 0
 let prev_screen_width = ref 0
-
 
 let resize_screen spasc height width =
   if (height <> !prev_screen_height) or (width <> !prev_screen_width) then begin
@@ -222,7 +233,8 @@ let make_orbit_window () =
     in let redraw_all _ =
       let da_width, da_height = Gdk.Drawable.get_size (da#misc#window)
       in let pixmap = GDraw.pixmap ~width:da_width ~height:da_height ()
-      in
+      in 
+	spasc_refocus spasc;
 	resize_screen spasc da_width da_height;
 	ignore (w#connect#destroy GMain.quit);
 	pixmap#set_foreground (`NAME "blue");
