@@ -10,9 +10,16 @@ let ensure_greater_than_minus_pi a =
   else
     a;;
 
+
+(*
+  distance angle alpha to target hosche
+  -2pi < alpha < 2pi
+  if alpha < 0 dann gehts im uhrzeigersinn
+*)
+
 let differenz ankunft sie uhrzeiger =
   let normalisierte_winkel =
-      (ensure_les_than_pi (pi -. sie +. ankunft))
+    ensure_greater_than_minus_pi (ensure_les_than_pi (pi -. sie +. ankunft))
   in
   if uhrzeiger then
     (inve pi) -. normalisierte_winkel  

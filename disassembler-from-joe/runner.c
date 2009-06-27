@@ -237,6 +237,12 @@ a_delta (double a1, double a2)
     return a_norm(a2-a1);
 }
 
+static double
+a_sign (double angle)
+{
+    return (angle >= 0) ? 1.0 : -1.0;
+}
+
 static void
 print_vec (vector_t v)
 {
@@ -279,9 +285,9 @@ get_norm_speed (machine_state_t *state)
     new = get_pos(&copy);
 
     {
-	double a1 = atan2(old.y, old.x);
-	double a2 = atan2(new.y, new.x);
-	double da = a_norm(a2-a1);
+	double a1 = v_angle(old);
+	double a2 = v_angle(new);
+	double da = a_delta(a1, a2);
 
 	vector_t veld = v_sub(new, old);
 	vector_t velc;
@@ -462,6 +468,71 @@ calc_ellipse (machine_state_t *state, vector_t *apogee, vector_t *perigee, int *
 	++iter;
     }
 }
+
+
+static void
+calc_ellipse_bertl(machine_state_t *state, vector_t *apogee, vector_t *perigee,
+		int *t_to_apogee, int *t_to_perigee,
+		get_pos_func_t get_pos_func)
+{
+    machine_state_t copy = *state;
+
+    vector_t pos = get_pos_func(&copy);
+    double dist = v_abs(pos);
+
+    double start_angle = v_angle(pos);
+    double sign_delta = a_sign(0);
+    double sign_last = sign_delta;
+    int sign_flip = 0;
+    int iter = 0;
+
+    double min_dist = dist;
+    double max_dist = dist;
+    vector_t min_pos = pos;
+    vector_t max_pos = pos;
+    int min_iter = iter;
+    int max_iter = iter;
+
+    do {
+	double angle;
+
+	timestep(&copy);
+	iter++;
+
+	pos = get_pos_func(&copy);
+	dist = v_abs(pos);
+	angle = v_angle(pos);
+
+
+	if (dist < min_dist) {
+	    min_dist = dist;
+	    min_pos = pos;
+	    min_iter = iter;
+	}
+
+	if (dist > max_dist) {
+	    max_dist = dist;
+	    max_pos = pos;
+	    max_iter = iter;
+	}
+
+	sign_delta = a_sign(angle - start_angle);
+	if (sign_last != sign_delta) {
+	    sign_last = sign_delta;
+	    sign_flip++;
+	}
+    } while (sign_flip < 3);
+
+    if (apogee)
+	*apogee = max_pos;
+    if (perigee)
+	*perigee = min_pos;
+    if (t_to_apogee)
+	*t_to_apogee = max_iter;
+    if (t_to_perigee)
+	*t_to_perigee = min_iter;
+}
+
 
 static int
 inject_circular_to_elliptical (machine_state_t *state, double dest_apogee, double tolerance)
@@ -713,7 +784,7 @@ main (int argc, char *argv[])
 
     calc_ellipse(&global_state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos);
 
-    g_print("us: t to apogee: %d  perigee: %d\n", t_to_our_apogee, t_to_our_perigee);
+    g_print("s us: t to apogee: %d  perigee: %d\n", t_to_our_apogee, t_to_our_perigee);
     g_print("apogee (%f) ", v_angle(our_apogee) / G_PI * 180.0);
     print_vec(our_apogee);
     g_print("   perigee (%f) ", v_angle(our_perigee) / G_PI * 180.0);
@@ -722,7 +793,7 @@ main (int argc, char *argv[])
 
     calc_ellipse(&global_state, &sat_apogee, &sat_perigee, &t_to_sat_apogee, &t_to_sat_perigee, get_meet_greet_sat_pos);
 
-    g_print("sat: t to apogee: %d  perigee: %d\n", t_to_sat_apogee, t_to_sat_perigee);
+    g_print("s sat: t to apogee: %d  perigee: %d\n", t_to_sat_apogee, t_to_sat_perigee);
     g_print("apogee (%f) ", v_angle(sat_apogee) / G_PI * 180.0);
     print_vec(sat_apogee);
     g_print("   perigee (%f) ", v_angle(sat_perigee) / G_PI * 180.0);
