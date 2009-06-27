@@ -161,7 +161,9 @@ let refresh_da da =
   GtkBase.Widget.queue_draw da#as_widget
 
 let status_line = ref (GMisc.label ~text:"Statusline" ~justify:`FILL ())
-    
+
+let update_status_line = (!status_line)#set_text
+
 let make_orbit_window () =
   let spasc = { zoom = earth_r *. initial_zoom;
 		speed = initial_speed;
@@ -238,13 +240,17 @@ let make_orbit_window () =
     in let remove_timeout = ref (fun () -> ())
     in let rec timeout_handler () =
 	if !playing then begin
-	  let stamp, score, fuel, x, y, orbit = q.Vmbridge.step spasc.speed;
+	  let stamp, score, fuel, x, y, orbit, rem =
+	    q.Vmbridge.step spasc.speed;
 	  in
 	    if ((int_of_float !our_x) <> (int_of_float x)) or
 	      ((int_of_float !our_y) <> (int_of_float y)) then begin
 		if (!our_x <> 0.0) && (!our_y <> 0.0) then
 		  our_history := (!our_x, !our_y) :: !our_history;
 	      end;
+	    update_status_line
+	      (Printf.sprintf "[%i] Score=%f Fuel=%f x=%f y=%f | %s"
+		 stamp score fuel x y rem);
 	    our_x := x;
 	    our_y := y;
 	    our_target_orbit := orbit;
