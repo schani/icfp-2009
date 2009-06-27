@@ -28,6 +28,7 @@ let rgb_magenta = 1.0, 0.0, 1.0
 let our_x = ref 0.0
 let our_y = ref 0.0
 let our_orbits = ref []
+let our_sats = ref []
 
 let our_history : (float * float) list ref = ref []
 
@@ -160,6 +161,9 @@ let show_sat ?(color=rgb_red) surface spasc x y =
   set_color surface color;
   paint_circle surface spasc (ccx spasc x) (ccy spasc y) 3.0
 
+let show_sats ?(color=rgb_red) surface spasc sats =
+  List.iter (fun (x, y) -> show_sat ~color surface spasc x y) sats
+
 let show_earth surface spasc =
   set_color surface rgb_green;
   paint_filled_circle surface spasc (ccx spasc 0.0) (ccy spasc 0.0) (vc spasc earth_r)
@@ -243,6 +247,7 @@ let make_orbit_window () =
 	in
 	  show_earth surface spasc;
 	  show_orbits surface spasc !our_orbits;
+	  show_sats surface spasc ~color:rgb_cyan !our_sats;
 	  show_sat surface spasc !our_x !our_y;
 	  show_trace surface spasc !our_history;
 	  d#put_pixmap ~x:0 ~y:0 ~xsrc:0 ~ysrc:0
@@ -265,6 +270,7 @@ let make_orbit_window () =
 	    our_x := x;
 	    our_y := y;
 	    our_orbits := orbits;
+	    our_sats := sats;
 	    ignore (redraw_all ());
 	    install_timeout_handler ();
 	end;

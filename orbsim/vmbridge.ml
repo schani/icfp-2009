@@ -25,22 +25,19 @@ let setup_file filename =
 	let rec parse_zeug ?(orbits=[]) ?(sats=[])
 	    orbitcount satcount = function
 	      | orb :: r when orbitcount > 0 ->
-		  Printf.fprintf stderr "1111111111111111111 orb=%s\n" orb;
 		  parse_zeug ~orbits:((float_of_string orb) :: orbits)
 		    ~sats (orbitcount - 1) satcount r
 	      | satx :: saty :: r when satcount > 0 ->
-		  Printf.fprintf stderr "2222222222222222222\n";
 		  parse_zeug ~orbits ~sats:(((float_of_string satx),
 					     (float_of_string saty)) :: sats)
 		    orbitcount (satcount - 1) r
 	      | _ ->
-		  Printf.fprintf stderr "3333333333333\n";
 		  (List.rev orbits), (List.rev sats), "REM"
 	      | [] ->
-		  Printf.fprintf stderr "DER DERCK IS LEER*\n"; flush stderr;
+		  Printf.fprintf stderr "DER ..IS LEER*\n"; flush stderr;
 		  raise (Parse_error "parse_zeug failed")
 	      | _ ->
-		  Printf.fprintf stderr "SCHASS IM VOID *\n"; flush stderr;
+		  Printf.fprintf stderr "MUELL IM VOID *\n"; flush stderr;
 		  raise (Parse_error "parse_zeug failed")
 	in
 	let line = input_line ifi
@@ -50,12 +47,9 @@ let setup_file filename =
 	      (fun stamp score fuel x y orbitcount satcount str ->
 		 let zeug = Str.split whitepages_regexp str
 		 in
-		   Printf.fprintf stderr "rest=%s orbitcount=%i satcount=%i\n"
-		     str orbitcount satcount;
 		   let orbits, sats, rem =
 		     parse_zeug orbitcount satcount zeug
 		   in
-		     Printf.fprintf stderr "parsed a line!\n"; flush stderr;
 		     stamp, score, fuel, x, y, orbits, sats, rem
 	      )
 	  with
