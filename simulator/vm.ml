@@ -278,7 +278,7 @@ let vm_execute m controller =
   let rec loop m = 
     let m = vm_execute_one_step m in
     (*    Array.iteri (fun i f -> Printf.printf "DUMP %d %f\n" i f) m.datamem;*)
-    Printf.printf "%c%07d" (Char.chr 0x0d) m.timestep; 
+    (* Printf.printf "%c%07d" (Char.chr 0x0d) m.timestep; *)
     if vm_is_done m then
       (closer m; m)
     else
