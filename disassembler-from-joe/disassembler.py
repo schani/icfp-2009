@@ -280,14 +280,15 @@ class CGenerator (CodeCollector):
 			elif  op[0] == 'cmpz':
 				pass
 			else:
-				print 'double %s = %f;' % (var_name(addr), self.mem[addr])
+				print 'double %s = %g;' % (var_name(addr), self.mem[addr])
 		for input in self.inputs:
 			print 'double input_%d = 0.0;' % input
 		print 'double output[%d];' % (port_max+1)
+		print 'int iter = 0;'
 		print 'for (int i = 0; i < %d; ++i) output[i] = 0.0;' % (port_max+1)
 
 	def gen_loop(self):
-		print 'while (output[0] == 0.0) {'
+		print 'while (iter++ < 3000000 && output[0] == 0.0) {'
 		addr = 0
 		while addr < len(self.code):
 			op = self.code[addr]
@@ -311,6 +312,7 @@ class CGenerator (CodeCollector):
 				print '    %s = %s;' % (var_name(addr+1), var_name(phi[1]))
 				print 'else'
 				print '    %s = %s;' % (var_name(addr+1), var_name(phi[2]))
+				op = phi
 				addr += 1
 			elif op[0] == 'sqrt':
 				print '%s = sqrt(%s);' % (var_name(addr), var_name(op[1]))
@@ -320,6 +322,8 @@ class CGenerator (CodeCollector):
 				print '%s = input_%d;' % (var_name(addr), op[1])
 			else:
 				raise Exception('Unknown opcode %s' % op[0])
+			#if op[0] != 'noop' and op[0] != 'cmpz' and op[0] != 'output':
+			#print 'printf("%s = %%f\\n", %s);' % (var_name(addr), var_name(addr))
 			addr += 1
 		print '}'
 
