@@ -153,16 +153,14 @@ let bi_delta_v3 rf a2 =
    sqrt( mu /. rf ) -. sqrt( 2.0 *. mu /. rf -. mu /. a2 );;
 
 let bi_semimajor_a1 r0 rb =
-  r0 +. rb /. 2.0;;
+  ( r0 +. rb ) /. 2.0;;
 
 let bi_semimajor_a2 rf rb =
-  rf +. rb /. 2.0;;
+  ( rf +. rb ) /. 2.0;;
 
-let bi_time_t1 a1 =
-  pi *. sqrt( a1 *. a1 *. a1 /. mu );;
+let bi_time_t a =
+  pi *. sqrt( a *. a *. a /. mu );;
 
-let bi_time_t2 a2 =
-  pi *. sqrt( a2 *. a2 *. a2 /. mu );;
 
 let bi_erster_schub sx sy intermediateradius gguhrzeiger =
   let startradius = radius sx sy in
@@ -186,11 +184,11 @@ let bi_dritter_schub sx sy intermediateradius zielradius gguhrzeiger =
 let bi_zeitpunkt_mittelschub sx sy intermediateradius =
   let startradius = radius sx sy in
   let a1 = bi_semimajor_a1 startradius intermediateradius in
-  bi_time_t1 a1;;  
+  bi_time_t a1;;  
 
 let bi_zeitpunkt_endschub intermediateradius zielradius =
   let a2 = bi_semimajor_a2 zielradius intermediateradius in
-  bi_time_t2 a2;;
+  bi_time_t a2;;
 
 let bi_zweiterpunkt sx sy zielradius =
   let alpha = winkel sx sy in
@@ -204,7 +202,8 @@ let bi_zweiterpunkt sx sy zielradius =
 let bielliptic sx1 sy1 sx2 sy2 zielradius =
   let rich = richtung  (to_our sx1) (to_our sy1) (to_our sx2) (to_our
     sy2) in
-  let inter = (radius (to_our sx2) (to_our sy2)) *. 0.1 in
+(*  let inter = (radius (to_our sx2) (to_our sy2)) *. 1.0 in *)
+  let inter = 268000000.0 in
   (
     
     (bi_erster_schub  (to_our sx2) (to_our sy2) inter rich),
