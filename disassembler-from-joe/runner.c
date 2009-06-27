@@ -182,6 +182,16 @@ get_speed (machine_state_t *state)
 }
 
 static vector_t
+v_rotate (vector_t v, double angle)
+{
+    vector_t new;
+
+    new.x = v.x*cos(angle)-v.y*sin(angle);
+    new.y = v.x*sin(angle)+v.y*cos(angle);
+    return new;
+}
+
+static vector_t
 get_norm_speed (machine_state_t *state)
 {
     machine_state_t copy = *state;
@@ -192,7 +202,20 @@ get_norm_speed (machine_state_t *state)
 
     new = get_pos(&copy);
 
-    return v_norm(v_sub(new, old));
+    {
+	double a1 = atan2(old.y, old.x);
+	double a2 = atan2(new.y, new.x);
+	double da = a1-a2;
+
+	vector_t vel = v_sub(new, old);
+	vector_t velc = v_rotate(vel, da);
+
+	/* g_print("[%f,%f] -> %f  (%f,%f) -> (%f,%f)\n",
+		a1, a2, da, vel.x, vel.y, velc.x, velc.y); */
+
+	return v_norm(velc);
+    }
+    // return v_norm(v_sub(new, old));
 }
 
 static double
