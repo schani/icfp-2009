@@ -210,6 +210,65 @@ inject_circular_to_elliptical (machine_state_t *state, double dest_apogee, doubl
     g_assert_not_reached();
 }
 
+static double
+calc_circular_orbit_difference (machine_state_t *state, vector_t thrust, int num_timesteps)
+{
+    machine_state_t copy = *state;
+    double first_dist = distance_from_earth(&copy);
+    int i = 0;
+
+    set_thrust(&copy, thrust);
+
+    for (i = 0; i < num_timesteps; ++i) {
+	timestep(&copy);
+	set_thrust(&copy, v_zero);
+    }
+
+    return distance_from_earth(&copy) - first_dist;
+}
+
+static void
+inject_elliptical_to_circular (machine_state_t *state, double dest_apogee, int num_timesteps, double tolerance)
+{
+    double min = 0, max = state->output[1];
+    vector_t speed, speed_norm;
+
+    g_assert(fabs(distance_from_earth(state) - dest_apogee) <= tolerance);
+
+    speed = get_speed(state);
+    speed_norm = v_norm(speed);
+
+    g_print("speed is ");
+    print_vec(speed);
+    print_vec(speed_norm);
+    g_print("\n");
+
+    while (min < max) {
+	double middle = (min + max) / 2;
+	vector_t thrust = v_mul_scal(speed_norm, middle);
+
+	g_print("trying thrust %f ", middle);
+	print_vec(thrust);
+	g_print("\n");
+
+	double diff = calc_circular_orbit_difference(state, thrust, num_timesteps);
+
+	g_print("diff is %f\n", diff);
+
+	if (fabs(diff) <= tolerance) {
+	    set_thrust(state, thrust);
+	    return;
+	}
+
+	if (diff < 0)
+	    min = middle;
+	else
+	    max = middle;
+    }
+
+    g_assert_not_reached();
+}
+
 static void
 print_timestep (machine_state_t *state)
 {
@@ -256,38 +315,20 @@ main (void)
 	set_thrust(&state, v_zero);
     }
 
-    return 0;
-
-    while (++iter < 3000000 && state.output[0] == 0.0) {
-	double sx, sy;
-
+    inject_elliptical_to_circular(&state, dest_apogee, 900, 0.000001);
+    while (iter < 3000000 && state.output[0] == 0.0) {
 	timestep(&state);
+	++iter;
+	print_timestep(&state);
 
-	old_inputs = state.inputs;
-	if (iter == 2) {
-	    state.inputs.input_2 = -5.87933562337077564;
-	    state.inputs.input_3 = -2466.47900495061549;
-	    /*
-	} else if (iter == 18875) {
-	    state.inputs.input_2 = 3.53485723689101805;
-	    state.inputs.input_3 = 1470.93135803171094;
-	    //state.inputs.input_3 = 1482.93135803171094;
-	    */
-	} else {
-	    state.inputs.input_2 = 0.0;
-	    state.inputs.input_3 = 0.0;
-	}
-	write_timestep(trace, &old_inputs, &state.inputs);
+	set_thrust(&state, v_zero);
 
-	sx = state.output[2];
-	sy = state.output[3];
-	if (iter % 1 == 0)
-	    printf("%d %f %f %f %f %f\n", iter, state.output[0], sx, sy, state.output[4],
-		   sqrt(sx * sx + sy * sy));
-	    //printf("%d %f %f %f %f %f\n", iter, state.output[0], state.output[1], state.output[2], state.output[3], state.output[4]);
+	//write_timestep(trace, &old_inputs, &state.inputs);
     }
 
-    write_count(0, trace);
+    g_print("score is %f\n", state.output[0]);
+
+    //write_count(0, trace);
 
     if (trace != NULL)
 	fclose(trace);
