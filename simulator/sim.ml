@@ -10,7 +10,7 @@
 open Vm
 
 let hohmannmode = `Hohmann
-let hohmannmode = `Bielliptic
+  (* let hohmannmode = `Bielliptic*)
 
 let get_aktuator = function 
   | Vm.Hohmann -> (match hohmannmode with 
@@ -21,7 +21,7 @@ let get_aktuator = function
 
 let get_configs = function
   | Vm.Hohmann -> [1001] (* ;1002;1003;1004] *)
-  | Vm.MeetAndGreet -> [2001] (*  [2001;2002;2003;2004]*)
+  | Vm.MeetAndGreet -> [2003] (*  [2001;2002;2003;2004]*)
   | _ -> failwith "not implementated"
 
 
