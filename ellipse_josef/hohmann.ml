@@ -18,6 +18,8 @@ let polar sx sy =
 let vektor r alpha =
   ((r *. (cos alpha)) , (r *. (sin alpha)) );;
 
+let distance  sx1 sy1 sx2 sy2 =
+  sqrt ((sx1 -. sx2) *. (sx1 -. sx2) +. (sy1 -. sy2) *. (sy1 -. sy2));;
 
 (*
   kg 
@@ -85,6 +87,9 @@ let zweiter_schub sx sy zielradius gguhrzeiger =
   in
   vektor (delta_v_prime startradius zielradius) alpha;;
 
+(*
+  in absoluten koordinaten
+*)
 let zweiterpunkt  sx sy zielradius =
     vektor zielradius ((winkel sx sy) +. pi);;
 
@@ -127,7 +132,100 @@ let hohmann sx1 sy1 sx2 sy2 zielradius =
 );;
 
 
-hohmann (-6556995.342903) 7814.930000 (-6556981.371618) 15629.848899
-  42164000.000000;;
+(* hohmann (-6556995.342903) 7814.930000 (-6556981.371618) 15629.848899 *)
+(*   8000000q.000000;; *)
+
+(* hohmann (-6556995.342903) 7814.930000 (-6556981.371618) 15629.848899 *)
+(*   80000000.000000;; *)
 
 
+let to_absolute we other = other -. we;;
+
+
+(*
+  pi / s
+*)
+
+let speed sx1 sy1 sx2 sy2 =
+  let a = pos_winkel (winkel sx1 sy1) in
+  let b = pos_winkel (winkel sx2 sy2) in
+  b -. a;;
+
+
+(* let winkel_if_shot wex1 wey1 wex2 wey2 oex1 oey1 oex2 oey2 = *)
+(*   let zielr = radius (to_absolute wex1 oex1) (to_absolute wey1 oey1) in *)
+(*   let zielspeed = speed  *)
+(*     (to_absolute wex1 oex1)  *)
+(*     (to_absolute wey1 oey1) *)
+(*     (to_absolute wex2 oex2)  *)
+(*     (to_absolute wey2 oey2) in *)
+(*   let arrival_date = zeitbedarf  wex2 wey2 zielr in *)
+(*   let arrival_point = zweiterpunkt wex2 wey2 zielr in *)
+(*   let alpha = winkel  (to_absolute  wex2 oex2 ) (to_absolute wey2 oey2) in *)
+(*   let his_pos = vektor zielr (alpha +. (zielspeed *. arrival_date)) in *)
+(*   match (arrival_point, his_pos) with *)
+(*       ((x,y), (hx,hy)) -> distance x y hx hy;; *)
+
+
+let winkel_if_shot wex1 wey1 wex2 wey2 oex1 oey1 oex2 oey2 =
+  let zielr = radius (to_absolute wex1 oex1) (to_absolute wey1 oey1) in
+  let zielspeed = speed 
+    (to_absolute wex1 oex1) 
+    (to_absolute wey1 oey1)
+    (to_absolute wex2 oex2) 
+    (to_absolute wey2 oey2) in
+  let arrival_date = zeitbedarf  (to_our wex2) (to_our wey2) zielr in
+  let arrival_point = zweiterpunkt (to_our wex2) (to_our wey2) zielr in
+  let his_alpha = winkel  (to_absolute  wex2 oex2 ) (to_absolute wey2 oey2) in
+  let our_alpha = match arrival_point with
+      (x,y) -> winkel x y in 
+  (his_alpha +. (arrival_date *.zielspeed)) -. our_alpha;;
+
+
+let time_to_start wex1 wey1 wex2 wey2 oex1 oey1 oex2 oey2 =
+  let winkel_to_goal = 
+    (winkel_if_shot wex1 wey1 wex2 wey2 oex1 oey1 oex2 oey2) in
+  let winkel_to_wait =
+      winkel_to_goal in
+  let zielspeed = speed 
+    (to_absolute wex1 oex1) 
+    (to_absolute wey1 oey1)
+    (to_absolute wex2 oex2) 
+    (to_absolute wey2 oey2) in
+  let ourspeed = speed
+    (to_our wex1) 
+    (to_our wey1) 
+    (to_our wex2) 
+    (to_our wey2) in
+  winkel_to_wait /. (ourspeed -. zielspeed);;
+
+
+ 
+
+(* time_to_start  *)
+(*   (-6556995.342903) (7814.932739)  *)
+(*   (-6556981.371618) (15629.854376) *)
+(*   (1800001.790116) (892.59737999) *)
+(*   (1800007.160459) (1785.18840850);; *)
+
+(*  winkel_if_shot *)
+(*   (-6556995.342903) (7814.932739)  *)
+(*   (-6556981.371618) (15629.854376) *)
+(*   (1800001.790116) (892.59737999) *)
+(*   (1800007.160459) (1785.18840850);; *)
+
+ 
+
+(* to_absolute (-6556995.342903) (1800001.790116)  ;; *)
+(*  to_absolute (7814.932739) (892.59737999)  ;; *)
+
+(*  to_absolute (-6556981.371618) (1800007.160459)  ;; *)
+(*  to_absolute (15629.854376) (1785.18840850)  ;; *)
+
+
+(*   hohmann  (-6556995.342903) (7814.932739)  (-6556981.371618) *)
+(*   (15629.854376) *)
+(*     (radius  *)
+(*       (to_absolute (-6556995.342903) (1800001.790116) )  *)
+(*       (to_absolute  (7814.932739) (892.59737999)) *)
+(*     );; *)
