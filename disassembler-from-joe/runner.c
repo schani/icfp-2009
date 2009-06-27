@@ -2,6 +2,14 @@
 #include <math.h>
 #include <stdio.h>
 
+typedef struct
+{
+    double x;
+    double y;
+} vector_t;
+
+static const vector_t v_zero = { 0.0, 0.0 };
+
 int iter;
 
 typedef void (*compare_init_func_t) (guint32 n, gpointer user_data);
@@ -55,6 +63,141 @@ write_timestep (FILE *trace, machine_inputs_t *old, machine_inputs_t *new)
     compare_inputs(old, new, write_count_func, write_value_func, trace);
 }
 
+static vector_t
+get_pos (machine_state_t *state)
+{
+    vector_t v;
+
+    v.x = -state->output[2];
+    v.y = -state->output[3];
+
+    return v;
+}
+
+static vector_t
+v_sub (vector_t a, vector_t b)
+{
+    vector_t c = { a.x - b.x, a.y - b.y };
+    return c;
+}
+
+static double
+v_abs (vector_t v)
+{
+    return sqrt(v.x * v.x + v.y * v.y);
+}
+
+static vector_t
+v_mul_scal (vector_t v, double a)
+{
+    vector_t w = { v.x * a, v.y * a };
+    return w;
+}
+
+static vector_t
+v_norm (vector_t v)
+{
+    double a = v_abs(v);
+    return v_mul_scal(v, 1.0 / a);
+}
+
+static void
+print_vec (vector_t v)
+{
+    g_print("(%f,%f)", v.x, v.y);
+}
+
+static vector_t
+get_speed (machine_state_t *state)
+{
+    machine_state_t copy = *state;
+    vector_t old = get_pos(state);
+    vector_t new;
+
+    timestep(&copy);
+
+    new = get_pos(&copy);
+
+    return v_sub(new, old);
+}
+
+static double
+distance_from_earth (machine_state_t *state)
+{
+    return v_abs(get_pos(state));
+}
+
+static void
+set_thrust (machine_state_t *state, vector_t thrust)
+{
+    state->inputs.input_2 = thrust.x;
+    state->inputs.input_3 = thrust.y;
+}
+
+static double
+calc_apogee (machine_state_t *state, vector_t thrust, double max_dist)
+{
+    machine_state_t copy = *state;
+
+    set_thrust(&copy, thrust);
+
+    for (;;) {
+	double old_dist;
+	double new_dist;
+
+	old_dist = distance_from_earth(&copy);
+	timestep(&copy);
+	new_dist = distance_from_earth(&copy);
+	set_thrust(&copy, v_zero);
+
+	if (new_dist >= max_dist)
+	    return max_dist;
+
+	if (new_dist <= old_dist)
+	    return old_dist;
+    }
+}
+
+static void
+inject_circular_to_elliptical (machine_state_t *state, double dest_apogee, double tolerance)
+{
+    double min = 0, max = state->output[1];
+    vector_t speed, speed_norm;
+
+    g_assert(dest_apogee > distance_from_earth(state));
+
+    speed = get_speed(state);
+    speed_norm = v_norm(speed);
+
+    g_print("speed is ");
+    print_vec(speed);
+    print_vec(speed_norm);
+    g_print("\n");
+
+    while (min < max) {
+	double middle = (min + max) / 2;
+	vector_t thrust = v_mul_scal(speed_norm, middle);
+
+	g_print("trying thrust %f ", middle);
+	print_vec(thrust);
+	g_print("\n");
+
+	double apogee = calc_apogee(state, thrust, dest_apogee * 2.0);
+
+	g_print("apogee is %f\n", apogee);
+
+	if (fabs(apogee - dest_apogee) <= tolerance) {
+	    set_thrust(state, thrust);
+	    return;
+	}
+
+	if (apogee < dest_apogee)
+	    min = middle;
+	else
+	    max = middle;
+    }
+}
+
 #define SCENARIO	1001
 
 int
@@ -72,6 +215,12 @@ main (void)
     state.inputs.input_16000 = SCENARIO;
     write_timestep(trace, &old_inputs, &state.inputs);
 
+    timestep(&state);
+
+    inject_circular_to_elliptical(&state, 80000000.0, 0.000001);
+
+    return 0;
+
     while (++iter < 3000000 && state.output[0] == 0.0) {
 	double sx, sy;
 
@@ -81,10 +230,12 @@ main (void)
 	if (iter == 2) {
 	    state.inputs.input_2 = -5.87933562337077564;
 	    state.inputs.input_3 = -2466.47900495061549;
+	    /*
 	} else if (iter == 18875) {
 	    state.inputs.input_2 = 3.53485723689101805;
 	    state.inputs.input_3 = 1470.93135803171094;
 	    //state.inputs.input_3 = 1482.93135803171094;
+	    */
 	} else {
 	    state.inputs.input_2 = 0.0;
 	    state.inputs.input_3 = 0.0;
@@ -94,9 +245,9 @@ main (void)
 	sx = state.output[2];
 	sy = state.output[3];
 	if (iter % 1 == 0)
-	    //printf("%d %f %f %f %f %f\n", iter, state.output[0], sx, sy, state.output[4],
-	    //sqrt(sx * sx + sy * sy));
-	    printf("%d %f %f %f %f %f\n", iter, state.output[0], state.output[1], state.output[2], state.output[3], state.output[4]);
+	    printf("%d %f %f %f %f %f\n", iter, state.output[0], sx, sy, state.output[4],
+		   sqrt(sx * sx + sy * sy));
+	    //printf("%d %f %f %f %f %f\n", iter, state.output[0], state.output[1], state.output[2], state.output[3], state.output[4]);
     }
 
     write_count(0, trace);
