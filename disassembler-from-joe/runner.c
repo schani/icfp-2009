@@ -210,9 +210,9 @@ static double
 a_norm (double angle)
 {
     while (angle > G_PI)
-	angle -= G_PI;
+	angle -= 2*G_PI;
     while (angle <= -G_PI)
-	angle += G_PI;
+	angle += 2*G_PI;
     return angle;
 }
 
@@ -266,7 +266,7 @@ get_norm_speed (machine_state_t *state)
     {
 	double a1 = atan2(old.y, old.x);
 	double a2 = atan2(new.y, new.x);
-	double da = a_delta(a1, a2);
+	double da = a_norm(a2-a1);
 
 	vector_t veld = v_sub(new, old);
 	vector_t velc;
@@ -277,12 +277,14 @@ get_norm_speed (machine_state_t *state)
 	    velc = v_rotate(old, (da >= 0) ? G_PI/2.0 : -G_PI/2.0);
 	}
 
-	g_print("[%f,%f] -> %f  (%f,%f) -> (%f,%f)\n",
-		a1, a2, da, veld.x, veld.y, velc.x, velc.y);
-	return v_norm(velc);
-	
-    }
+	if (0) { 
+		vector_t vel = get_speed (state);
 
+		g_print("[%f,%f] -> %f  (%f,%f) : (%f,%f) -> (%f,%f)\n",
+			a1, a2, da, vel.x, vel.y, veld.x, veld.y, velc.x, velc.y);
+	}
+	return v_norm(velc);
+    }
     // return v_norm(v_sub(new, old));
 }
 
