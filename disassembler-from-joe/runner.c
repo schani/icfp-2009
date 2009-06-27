@@ -26,6 +26,8 @@ typedef void (*set_new_value_func_t) (guint32 addr, double new_value, gpointer u
 #error bla
 #endif
 
+typedef vector_t (*get_pos_func_t) (machine_state_t *state);
+
 FILE *dump_file = NULL;
 FILE *global_trace = NULL;
 int global_iter;
@@ -78,6 +80,17 @@ write_timestep (FILE *trace, machine_inputs_t *old, machine_inputs_t *new)
     compare_inputs(old, new, write_count_func, write_value_func, trace);
 }
 
+static vector_t
+get_pos (machine_state_t *state)
+{
+    vector_t v;
+
+    v.x = -state->output[2];
+    v.y = -state->output[3];
+
+    return v;
+}
+
 #if defined(BIN1)
 static void
 print_timestep (machine_state_t *state)
@@ -86,7 +99,7 @@ print_timestep (machine_state_t *state)
     double sy = -state->output[3];
 
     if (dump_file != NULL)
-	fprintf(dump_file, "%d %f %f %f %f 1 0 %f %f\n", global_iter, state->output[0], state->output[1],
+	fprintf(dump_file, "%d %f %f %f %f 1 0 0 %f %f\n", global_iter, state->output[0], state->output[1],
 		sx, sy, state->output[4], sqrt(sx * sx + sy * sy));
 }
 #elif defined(BIN2) || defined(BIN3)
@@ -100,8 +113,21 @@ print_timestep (machine_state_t *state)
     double dy = state->output[5];
 
     if (dump_file != NULL)
-	fprintf(dump_file, "%d %f %f %f %f 0 1 %f %f %f\n", global_iter, state->output[0], state->output[1],
+	fprintf(dump_file, "%d %f %f %f %f 0 1 0 %f %f %f\n", global_iter, state->output[0], state->output[1],
 		sx, sy, sx + dx, sy + dy, sqrt(sx * sx + sy * sy));
+}
+
+static vector_t
+get_meet_greet_sat_pos (machine_state_t *state)
+{
+    vector_t pos = get_pos(state);
+
+    double dx = state->output[4];
+    double dy = state->output[5];
+
+    vector_t v = { pos.x + dx, pos.y + dy };
+
+    return v;
 }
 #else
 #error bla
@@ -124,17 +150,6 @@ do_timestep (machine_state_t *state)
 	global_timestep();
     else
 	timestep(state);
-}
-
-static vector_t
-get_pos (machine_state_t *state)
-{
-    vector_t v;
-
-    v.x = -state->output[2];
-    v.y = -state->output[3];
-
-    return v;
 }
 
 static vector_t
@@ -327,10 +342,11 @@ calc_apogee (machine_state_t *state, vector_t thrust, double max_dist, int *num_
 }
 
 static void
-calc_ellipse (machine_state_t *state, vector_t *apogee, vector_t *perigee, int *t_to_apogee, int *t_to_perigee)
+calc_ellipse (machine_state_t *state, vector_t *apogee, vector_t *perigee, int *t_to_apogee, int *t_to_perigee,
+	      get_pos_func_t get_pos_func)
 {
     machine_state_t copy = *state;
-    double dist = distance_from_earth(&copy);
+    double dist = v_abs(get_pos_func(&copy));
     gboolean ascending;
     gboolean have_apogee = FALSE, have_perigee = FALSE;
     vector_t pos;
@@ -340,15 +356,15 @@ calc_ellipse (machine_state_t *state, vector_t *apogee, vector_t *perigee, int *
     ++iter;
     set_thrust(&copy, v_zero);
 
-    ascending = distance_from_earth(&copy) > dist;
-    pos = get_pos(&copy);
-    dist = distance_from_earth(&copy);
+    ascending = v_abs(get_pos_func(&copy)) > dist;
+    pos = get_pos_func(&copy);
+    dist = v_abs(pos);
 
     while (!have_apogee || !have_perigee) {
 	gboolean new_ascending;
 
 	timestep(&copy);
-	new_ascending = distance_from_earth(&copy) > dist;
+	new_ascending = v_abs(get_pos_func(&copy)) > dist;
 
 	if (new_ascending != ascending) {
 	    if (ascending) {
@@ -365,8 +381,8 @@ calc_ellipse (machine_state_t *state, vector_t *apogee, vector_t *perigee, int *
 	}
 
 	ascending = new_ascending;
-	dist = distance_from_earth(&copy);
-	pos = get_pos(&copy);
+	pos = get_pos_func(&copy);
+	dist = v_abs(pos);
 
 	++iter;
     }
@@ -653,17 +669,28 @@ main (int argc, char *argv[])
     g_assert_not_reached();
 #elif defined(BIN3)
 
-    vector_t apogee, perigee;
-    int t_to_apogee, t_to_perigee;
+    vector_t our_apogee, our_perigee;
+    vector_t sat_apogee, sat_perigee;
+    int t_to_our_apogee, t_to_our_perigee;
+    int t_to_sat_apogee, t_to_sat_perigee;
 
-    calc_ellipse(&global_state, &apogee, &perigee, &t_to_apogee, &t_to_perigee);
+    calc_ellipse(&global_state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos);
 
-    g_print("t to apogee: %d  perigee: %d\n", t_to_apogee, t_to_perigee);
-    g_print("apogee (%f) ", v_angle(apogee) / G_PI * 180.0);
-    print_vec(apogee);
-    g_print("   perigee (%f) ", v_angle(perigee) / G_PI * 180.0);
-    print_vec(perigee);
-    g_print("\n");
+    g_print("us: t to apogee: %d  perigee: %d\n", t_to_our_apogee, t_to_our_perigee);
+    g_print("apogee (%f) ", v_angle(our_apogee) / G_PI * 180.0);
+    print_vec(our_apogee);
+    g_print("   perigee (%f) ", v_angle(our_perigee) / G_PI * 180.0);
+    print_vec(our_perigee);
+    g_print("\n\n");
+
+    calc_ellipse(&global_state, &sat_apogee, &sat_perigee, &t_to_sat_apogee, &t_to_sat_perigee, get_meet_greet_sat_pos);
+
+    g_print("sat: t to apogee: %d  perigee: %d\n", t_to_sat_apogee, t_to_sat_perigee);
+    g_print("apogee (%f) ", v_angle(sat_apogee) / G_PI * 180.0);
+    print_vec(sat_apogee);
+    g_print("   perigee (%f) ", v_angle(sat_perigee) / G_PI * 180.0);
+    print_vec(sat_perigee);
+    g_print("\n\n");
 #else
 #error bla
 #endif
