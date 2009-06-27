@@ -218,8 +218,6 @@ static double
 v_angle (vector_t v)
 {
     double angle = atan2(v.y, v.x);
-    if (angle < 0.0)
-	angle += 2.0 * G_PI;
     return angle;
 }
 
@@ -550,9 +548,9 @@ inject_elliptical_to_circular (machine_state_t *state, double sign,
 static gboolean
 between_angles (double angle, double a1, double a2, double max_diff)
 {
-    g_assert(angle >= 0 && angle <= 2.0 * G_PI);
-    g_assert(a1 >= 0 && a1 <= 2.0 * G_PI);
-    g_assert(a2 >= 0 && a2 <= 2.0 * G_PI);
+    g_assert(angle >= -G_PI && angle <= G_PI);
+    g_assert(a1 >= -G_PI && a1 <= G_PI);
+    g_assert(a2 >= -G_PI && a2 <= G_PI);
 
     if (fabs(a1 - a2) > max_diff) {
 	if (a1 < a2)
