@@ -37,7 +37,7 @@ let output_frame oc (timestep,liste) =
     let rec loop = function
       | [] -> ()
       | (addr,value)::xs -> 
-	  (* Printf.printf "dumping %d %f\n" addr value;   *)
+	  Printf.printf "dumping %d %d %f\n" timestep addr value;   
 	  outputi oc addr;
 	  outputf oc value;
 	  loop xs
