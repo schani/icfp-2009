@@ -38,6 +38,7 @@ let _ =
   let machine = Vm.vm_init_machine Vm.Hohmann in
   (* 6.) die will die konfiguriert sein *)
   let machine = Vm.vm_configure machine 1001 in
+  let machine = Vm.vm_set_output_filename machine ((string_of_int 1001)^".sub") in
   (* 7.) Go! go! go! ... *)
   let _ = Vm.vm_execute machine (fun m -> aktuator (visualisierer m)) in
   0

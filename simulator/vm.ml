@@ -18,25 +18,21 @@ let get_file_for_problem = function
   | Eccentric -> "../angabe/bin3.obf"
   | ClearSky -> failwith "streber!" (* "../angabe/bin4.obf" *)
 
-module OrderedInt = 
-  struct
-    type t = int
-    let compare = Pervasives.compare
-  end
-module IntMap = Map.Make(OrderedInt)
-
 
 type machine_state = 
     {
       problem: problem;
+      teamnumber: int;
+      outputfilename: string;
       datamem: float array;
       insnmem: Instructions.instruction array;
       statusreg: bool;
       instruction_pointer:int;
-      (* todo make these faster! *) 
-      input_ports: float IntMap.t;
-      output_ports: float IntMap.t;
+      input_ports: float array;
+      old_input_ports: float array;
+      output_ports: float array;
       timestep: int;
+      config: float;
     }
 
 let memsize = 0x4000
@@ -70,14 +66,36 @@ let alloc_machine problem =
   let insn = Array.make memsize Instructions.zero in
   {
     problem = problem;
+    teamnumber = 19; 
+    outputfilename = "";
     datamem = data; 
     insnmem = insn; 
     statusreg = false;
     instruction_pointer = -1;
-    input_ports = IntMap.empty;
-    output_ports = IntMap.empty;
+    input_ports = Array.make (0x9 + 3*11) 0.;
+    old_input_ports = Array.make (0x9 + 3*11) 0.;
+    output_ports = Array.make 0x5 0.;
     timestep = 0;
+    config = 0.;
   }
+
+let exchange_inputs m = 
+  {m with input_ports = m.old_input_ports; old_input_ports = m.input_ports}
+
+let inputs_diff m = 
+  let len = Array.length m.input_ports in
+  let rec loop i acc = 
+    if i = len then
+      acc 
+    else
+      loop (i+1) (
+	if m.input_ports.(i) <> m.old_input_ports.(i) then
+	  (i,m.input_ports.(i))::acc
+	else
+	  acc
+      )
+  in
+  loop 0 []
 
 let fetch_insn m = 
   let m = {m with instruction_pointer = m.instruction_pointer + 1} in
@@ -95,17 +113,15 @@ let save_result m res =
 let read_status m = 
   m.statusreg
 
-let read_port m port = 
-  try 
-    let result = IntMap.find port m.input_ports in
-    (* Printf.printf "reading from port %d -> %f\n" port result; *)
-    result
-  with 
-      Not_found -> failwith ("read_port "^(string_of_int port))
+let read_port m = function
+  | 0x3E80 -> 
+      m.config
+  | port ->
+    m.input_ports.(port)
 
 let write_port m port data = 
- (* Printf.printf "writing %f to port %d\n" data port;  *)
-  {m with output_ports = IntMap.add port data m.output_ports}
+  m.output_ports.(port) <- data;
+  m
 
 let get_comparator = function
   | LTZ -> (<)
@@ -177,18 +193,16 @@ let execute_one_instruction m =
 
     
 let write_actuator m portno data = 
-  {m with input_ports = IntMap.add portno data m.input_ports}
+  m.input_ports.(portno) <- data;
+  m
+    (* {m with input_ports = IntMap.add portno data m.input_ports} *)
 
 let vm_write_actuator m portid data = 
   write_actuator m (input_port_number portid) data
 
-let vm_read_sensor m address = 
-  try 
-    IntMap.find  address m.output_ports
-  with 
-      Not_found -> 
-	0.
-
+let vm_read_sensor m port =
+    m.output_ports.(port)  
+    
 let vm_init_machine problem = 
   let m = alloc_machine problem in
   let ic = Basic_reader.open_obf (get_file_for_problem problem) in 
@@ -210,7 +224,8 @@ let vm_configure m config =
   let m = vm_write_actuator m DeltaX 0E0 in
   let m = vm_write_actuator m DeltaY 0E0 in
   if check_config m.problem config then 
-    write_actuator m 0x3E80 (float_of_int config)
+    
+    {m with config = (float_of_int config)}
   else
     failwith "bad config"
 
@@ -228,16 +243,46 @@ let vm_execute_one_step m =
   let m = loop m in
   {m with timestep = m.timestep + 1; instruction_pointer = -1; }
 
+let vm_is_done m = 
+  (* score written || 3M timesteps  -> eog *)
+  (((vm_read_sensor m 0) <> 0.) || (m.timestep = 3000000))
+  
+
+let open_writer filname m = 
+  let oc = Basic_writer.open_submission filname m.teamnumber
+    (int_of_float m.config) in
+
+  let write_frame m = 
+    let diff = inputs_diff m in
+    if diff <> [] then
+      Basic_writer.output_frame oc (m.timestep,diff);
+    exchange_inputs m;
+  in
+  let close_write m = 
+    Basic_writer.output_end_of_submission oc m.timestep;
+    Basic_writer.close_submission oc;
+    ()
+  in
+  write_frame,close_write
+
+let vm_set_output_filename m name = 
+  {m with outputfilename = name}
+
 let vm_execute m controller = 
+  let writer,closer = 
+    if m.outputfilename <> "" then
+      open_writer m.outputfilename m 
+    else
+      (fun m -> m),(fun m -> ())
+  in
   let rec loop m = 
     let m = vm_execute_one_step m in
-(*    Array.iteri (fun i f -> Printf.printf "DUMP %d %f\n" i f) m.datamem;*)
+    (*    Array.iteri (fun i f -> Printf.printf "DUMP %d %f\n" i f) m.datamem;*)
     Printf.printf "%c%07d" (Char.chr 0x0d) m.timestep; 
-    if ((vm_read_sensor m 0) <> 0.) || (m.timestep = 3000000) then
-      (* score written -> eog || 3M timesteps*)
-      m
+    if vm_is_done m then
+      (closer m; m)
     else
-      loop (controller m)
+      (writer m; loop (controller m))
   in
   let m = loop m in 
   Printf.printf "muhkuh scored: %f\n" (vm_read_sensor m 0);
