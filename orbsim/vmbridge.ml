@@ -20,7 +20,7 @@ let setup_file filename =
     | _ ->
 	try
 	  Scanf.sscanf (input_line ifi) "%i %f %f %f %f %f"
-            (fun stamp score fuel x y muh -> stamp, score, fuel, x, y, muh)
+            (fun stamp score fuel x y orbit -> stamp, score, fuel, x, y, orbit)
 	with
 	    _ -> raise End_of_trace
   in

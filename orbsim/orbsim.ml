@@ -2,6 +2,8 @@
  *)
 
 (* TODO:
+   + pan (aber keine floete)
+   + trace
    + fadenkreuz wenn erde zu klein
 
 *)
@@ -9,7 +11,7 @@
 open GMain
 
 let earth_r = 6357000.0
-let initial_zoom = 4.0
+let initial_zoom = 7.0
 let initial_speed = 10
 let pi = atan 1. *. 4.0;;
 let two_pi = pi *. 2.0;;
@@ -23,6 +25,7 @@ let rgb_magenta = 1.0, 0.0, 1.0
 
 let our_x = ref 0.0
 let our_y = ref 0.0
+let our_target_orbit = ref 0.0
   
 (* 0,0 is always in middle of screen (coords of earth) *)
 type space_screen = {
@@ -69,7 +72,7 @@ let paint_line surface x1 y1 x2 y2 =
   Cairo.line_to surface x2 y2;
   Cairo.stroke surface
 
-let paint_circle surface spasc x y r =
+let paint_filled_circle surface spasc x y r =
   Cairo.save surface;
   Cairo.new_path surface;
   Cairo.arc surface (ccx spasc x) (ccy spasc y) r 0. two_pi;
@@ -77,16 +80,24 @@ let paint_circle surface spasc x y r =
   Cairo.restore surface;
   Cairo.stroke surface
 
+let paint_circle surface spasc x y r =
+  Cairo.arc surface (ccx spasc x) (ccy spasc y) r 0. two_pi;
+  Cairo.stroke surface
+
 let set_color surface (r,g,b) =
   Cairo.set_source_rgb surface r g b
-  
-let paint_sat surface spasc x y =
-  set_color surface rgb_red;
-  paint_circle surface spasc x y 5.0
+
+let paint_orbit ?(color=rgb_yellow) surface spasc r =
+  set_color surface color;
+  paint_circle surface spasc 0.0 0.0 (vc spasc r)
+
+let paint_sat ?(color=rgb_red) surface spasc x y =
+  set_color surface color;
+  paint_circle surface spasc x y 3.0
 
 let paint_earth surface spasc =
   set_color surface rgb_green;
-  paint_circle surface spasc 0.0 0.0 (vc spasc earth_r)
+  paint_filled_circle surface spasc 0.0 0.0 (vc spasc earth_r)
 
 let create_space surface spasc =
   paint_earth surface spasc
@@ -145,6 +156,7 @@ let make_orbit_window () =
 	let surface = (surface_from_gdk_pixmap pixmap#pixmap)
 	in
 	  paint_earth surface spasc;
+	  paint_orbit surface spasc !our_target_orbit;
 	  paint_sat surface spasc !our_x !our_y;
 	  d#put_pixmap ~x:0 ~y:0 ~xsrc:0 ~ysrc:0
 	    ~width:da_width ~height:da_height pixmap#pixmap;
@@ -152,10 +164,11 @@ let make_orbit_window () =
     in let remove_timeout = ref (fun () -> ())
     in let rec timeout_handler () =
 	if !playing then begin
-	  let stamp, score, fuel, x, y, muh = q.Vmbridge.step spasc.speed;
+	  let stamp, score, fuel, x, y, orbit = q.Vmbridge.step spasc.speed;
 	  in
 	    our_x := x;
 	    our_y := y;
+	    our_target_orbit := orbit;
 	    ignore (redraw_all ());
 	    install_timeout_handler ();
 	end;
