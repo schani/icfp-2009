@@ -292,7 +292,11 @@ class CGenerator (CodeCollector):
 	def gen_inits(self):
 		print 'void init_machine (machine_state_t *state) {'
 		for addr in self.vars:
-			print 'state->%s = %g;' % (var_name(addr), self.mem[addr])
+			print 'unsigned char %s_mem[] = {' % var_name(addr)
+			for c in struct.pack("d", self.mem[addr]):
+				print '0x%02X,' % ord(c)
+			print '};'
+			print 'state->%s = *(double*)%s_mem;' % (var_name(addr), var_name(addr))
 		for input in self.inputs:
 			print 'state->input_%d = 0.0;' % input
 		print 'for (int i = 0; i < %d; ++i) state->output[i] = 0.0;' % (self.port_max+1)
