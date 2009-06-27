@@ -13,6 +13,7 @@ open GMain
 
 
 let earth_r = 6357000.0
+let moon_r =  173600.0 (* mycrometer genau! *)
 let initial_zoom = 10.0
 let initial_speed = 10
 let pi = atan 1. *. 4.0;;
@@ -29,6 +30,7 @@ let our_x = ref 0.0
 let our_y = ref 0.0
 let our_orbits = ref []
 let our_sats = ref []
+let our_moons = ref []
 
 let our_history : (float * float) list ref = ref []
 
@@ -166,7 +168,13 @@ let show_sats ?(color=rgb_red) surface spasc sats =
 
 let show_earth surface spasc =
   set_color surface rgb_green;
-  paint_filled_circle surface spasc (ccx spasc 0.0) (ccy spasc 0.0) (vc spasc earth_r)
+  paint_filled_circle surface spasc (ccx spasc 0.0) (ccy spasc 0.0)
+    (vc spasc earth_r)
+
+let show_moon surface spasc (x, y) =
+  set_color surface rgb_yellow;
+  paint_filled_circle surface spasc (ccx spasc x) (ccy spasc y)
+    (vc spasc moon_r)
 
 let create_space surface spasc =
   show_earth surface spasc
@@ -240,12 +248,14 @@ let make_orbit_window () =
 	spasc_refocus spasc;
 	resize_screen spasc da_width da_height;
 	ignore (w#connect#destroy GMain.quit);
-	pixmap#set_foreground (`NAME "blue");
+	pixmap#set_foreground (`NAME "black");
 	pixmap#rectangle ~x:0 ~y:0 ~width:da_width ~height:da_height
 	  ~filled:true ();
 	let surface = (surface_from_gdk_pixmap pixmap#pixmap)
 	in
 	  show_earth surface spasc;
+	  if !our_moons <> [] then
+	    show_moon surface spasc (List.hd !our_moons);
 	  show_orbits surface spasc !our_orbits;
 	  show_sats surface spasc ~color:rgb_cyan !our_sats;
 	  show_sat surface spasc !our_x !our_y;
@@ -256,7 +266,7 @@ let make_orbit_window () =
     in let remove_timeout = ref (fun () -> ())
     in let rec timeout_handler () =
 	if !playing then begin
-	  let stamp, score, fuel, x, y, orbits, sats, rem =
+	  let stamp, score, fuel, x, y, orbits, sats, moons, rem =
 	    q.Vmbridge.step spasc.speed;
 	  in
 	    if ((int_of_float !our_x) <> (int_of_float x)) or
@@ -271,6 +281,7 @@ let make_orbit_window () =
 	    our_y := y;
 	    our_orbits := orbits;
 	    our_sats := sats;
+	    our_moons := moons;
 	    ignore (redraw_all ());
 	    install_timeout_handler ();
 	end;
