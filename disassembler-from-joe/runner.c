@@ -10,12 +10,15 @@ typedef struct
 
 static const vector_t v_zero = { 0.0, 0.0 };
 
-int iter;
-
 typedef void (*compare_init_func_t) (guint32 n, gpointer user_data);
 typedef void (*set_new_value_func_t) (guint32 addr, double new_value, gpointer user_data);
 
 #include "out.c"
+
+FILE *global_trace;
+int global_iter;
+machine_state_t global_state;
+machine_inputs_t global_old_inputs;
 
 static FILE*
 open_trace_file (char *filename, guint32 team_id, guint32 scenario)
@@ -35,7 +38,7 @@ open_trace_file (char *filename, guint32 team_id, guint32 scenario)
 static void
 write_count (guint32 count, FILE *f)
 {
-    fwrite(&iter, 4, 1, f);
+    fwrite(&global_iter, 4, 1, f);
     fwrite(&count, 4, 1, f);
 }
 
@@ -61,6 +64,28 @@ write_timestep (FILE *trace, machine_inputs_t *old, machine_inputs_t *new)
     if (trace == NULL)
 	return;
     compare_inputs(old, new, write_count_func, write_value_func, trace);
+}
+
+static void
+print_timestep (machine_state_t *state)
+{
+    double sx = state->output[2];
+    double sy = state->output[3];
+
+    printf("%d %f %f %f %f %f\n", global_iter, state->output[0], sx, sy, state->output[4],
+	   sqrt(sx * sx + sy * sy));
+
+    //printf("%d %f %f %f %f %f\n", iter, state.output[0], state.output[1], state.output[2], state.output[3], state.output[4]);
+}
+
+static void
+global_timestep (void)
+{
+    write_timestep(global_trace, &global_old_inputs, &global_state.inputs);
+    global_old_inputs = global_state.inputs;
+    timestep(&global_state);
+    ++global_iter;
+    print_timestep(&global_state);
 }
 
 static vector_t
@@ -269,68 +294,43 @@ inject_elliptical_to_circular (machine_state_t *state, double dest_apogee, int n
     g_assert_not_reached();
 }
 
-static void
-print_timestep (machine_state_t *state)
-{
-    double sx = state->output[2];
-    double sy = state->output[3];
-
-    printf("%d %f %f %f %f %f\n", iter, state->output[0], sx, sy, state->output[4],
-	   sqrt(sx * sx + sy * sy));
-
-    //printf("%d %f %f %f %f %f\n", iter, state.output[0], state.output[1], state.output[2], state.output[3], state.output[4]);
-}
-
 #define SCENARIO	1001
 
 int
 main (void)
 {
-    machine_state_t state;
-    machine_inputs_t old_inputs;
-    FILE *trace = open_trace_file("/tmp/trace", 19, SCENARIO);
     int num_iters, i;
     double dest_apogee;
 
-    init_machine(&state);
-    old_inputs = state.inputs;
+    global_trace = open_trace_file("/tmp/trace", 19, SCENARIO);
 
-    iter = 0;
+    init_machine(&global_state);
+    global_old_inputs = global_state.inputs;
+    global_iter = 0;
 
-    state.inputs.input_16000 = SCENARIO;
-    write_timestep(trace, &old_inputs, &state.inputs);
+    global_state.inputs.input_16000 = SCENARIO;
 
-    timestep(&state);
-    ++iter;
-    print_timestep(&state);
+    global_timestep();
 
-    dest_apogee = state.output[4];
+    dest_apogee = global_state.output[4];
 
-    num_iters = inject_circular_to_elliptical(&state, dest_apogee, 0.000001);
+    num_iters = inject_circular_to_elliptical(&global_state, dest_apogee, 0.000001);
     for (i = 0; i < num_iters; ++i) {
-	timestep(&state);
-	++iter;
-	print_timestep(&state);
-
-	set_thrust(&state, v_zero);
+	global_timestep();
+	set_thrust(&global_state, v_zero);
     }
 
-    inject_elliptical_to_circular(&state, dest_apogee, 900, 0.000001);
-    while (iter < 3000000 && state.output[0] == 0.0) {
-	timestep(&state);
-	++iter;
-	print_timestep(&state);
-
-	set_thrust(&state, v_zero);
-
-	//write_timestep(trace, &old_inputs, &state.inputs);
+    inject_elliptical_to_circular(&global_state, dest_apogee, 900, 0.000001);
+    while (global_iter < 3000000 && global_state.output[0] == 0.0) {
+	global_timestep();
+	set_thrust(&global_state, v_zero);
     }
 
-    g_print("score is %f\n", state.output[0]);
+    g_print("score is %f\n", global_state.output[0]);
 
-    //write_count(0, trace);
+    write_count(0, global_trace);
 
-    if (trace != NULL)
-	fclose(trace);
+    if (global_trace != NULL)
+	fclose(global_trace);
     return 0;
 }
