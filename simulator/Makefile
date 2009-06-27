@@ -3,13 +3,14 @@
 DISTNAME = sim 
 BINFILES = $(DISTNAME)
 SBINFILES =
-LIBFILES =
+LIBFILES = vm
+LIBCOMPS-vm = basic_reader instructions vm
 DOCFILES = COPYING LICENSE CHANGELOG VERSION 
 OTHERFILES = $(DISTNAME).spec
 SRCFILES = $(shell echo *.ml *.mli *.mll *.mly) Makefile
 DISTFILES = $(DOCFILES) $(OTHERFILES) $(SRCFILES)
 DISTVERSIONFILES =
-MODULES = basic_reader  instructions vm 
+MODULES = basic_reader  basic_writer instructions vm 
 LIBRARIES = 
 BINARIES = $(BINFILES) $(SBINFILES)
 DISTVERSION = $(shell cat VERSION)

@@ -1,9 +1,9 @@
-# $Id: Makefile.ocaml,v 1.4 2006/05/14 20:51:20 heinz Exp $ -*- makefile -*-
+# $Id: Makefile.ocaml,v 1.4 2007/08/29 19:39:40 heinz Exp $
 # Generic Makefile for OCaml based Applications
 # Copyright (C) 2005-2006  Heinz Deinhart
 # Copyright (C) 2006  Martin Biely
 # License: GPL Version 2
-# Version: 0.4
+# Version: 0.4.3
 
 # This is a makefile for standalone OCaml applications.
 # It does not use ocamlfind, ocamlmake or any other OCaml specific tools,
@@ -11,7 +11,7 @@
 # where just the ocaml compiler and some libraries like lablgtk are installed.
 # Of course, it still tries to be as clever and automagically as possible:
 # It generates bytecode and native code executables, supports using and
-# building of libs, autmatically generates dependencies and can "make dist".
+# building libraries, autmatically generates dependencies and can "make dist".
 
 # This file should be included by the main Makefile, see example at the
 # very bottom. Maintaining several copies of this file in subdirs is not 
@@ -21,11 +21,11 @@
 .SUFFIXES:
 
 # dependencies
-OCAMLDEP = $(shell which ocamldep.opt 2>/dev/null || which ocamldep)
+OCAMLDEP = $(subst Objective Caml,Objective\ Caml,$(shell which ocamldep.opt 2>/dev/null || which ocamldep))
 
 # yacc & lex
-OCAMLLEX = $(shell which ocamllex.opt 2>/dev/null || which ocamllex)
-OCAMLYACC = $(shell which ocamlyacc.opt 2>/dev/null || which ocamlyacc)
+OCAMLLEX = $(subst Objective Caml,Objective\ Caml,$(shell which ocamllex.opt 2>/dev/null || which ocamllex))
+OCAMLYACC = $(subst Objective Caml,Objective\ Caml,$(shell which ocamlyacc.opt 2>/dev/null || which ocamlyacc))
 
 OCAMLLEX_SRCS = $(basename $(wildcard *.mll))
 OCAMLYACC_SRCS = $(basename $(wildcard *.mly))
@@ -38,31 +38,40 @@ LEXYACC_SRCS = $(addsuffix .ml, $(OCAMLLEX_SRCS)) \
 .SECONDARY: $(LEXYACC_SRCS)
 
 # generic ocaml ops
-OCAMLC_OPS = $(addprefix -I , $(LIBDIRS)) -g 
+OCAMLC_OPS = $(addprefix -I , $(LIBDIRS))
 
 # ocaml native compiler
-OPT_OCAMLC = $(shell which ocamlopt.opt 2>/dev/null || which ocamlopt) \
-		$(OCAMLC_OPS)
+OPT_OCAMLC = $(subst Objective Caml,Objective\ Caml,$(shell which ocamlopt.opt 2>/dev/null || which ocamlopt)) $(OCAMLC_OPS)
 OPT_LIBSUFFIX = cmxa
 OPT_OBJSUFFIX = cmx
-OPT_BINSUFFIX = opt
 
 # ocaml bytecode compiler
-OCAMLC = $(shell which ocamlc.opt 2>/dev/null || which ocamlc) -g $(OCAMLC_OPS)
+OCAMLC = $(subst Objective Caml,Objective\ Caml,$(shell which ocamlc.opt 2>/dev/null || which ocamlc)) -g $(OCAMLC_OPS)
 LIBSUFFIX = cma
 OBJSUFFIX = cmo
 
-all:	$(BINFILES) $(SBINFILES) \
-	$(addsuffix .$(OPT_BINSUFFIX), $(BINFILES)) \
-	$(addsuffix .$(OPT_BINSUFFIX), $(SBINFILES)) \
+ifeq ($(shell uname -o),Cygwin)
+BINSUFFIX=.exe
+OPT_BINSUFFIX=-opt.exe
+else
+BINSUFFIX=
+OPT_BINSUFFIX=.opt
+endif
+
+all:	$(addsuffix $(BINSUFFIX), $(BINFILES)) \
+	$(addsuffix $(OPT_BINSUFFIX), $(BINFILES)) \
+	$(addsuffix $(BINSUFFIX), $(SBINFILES)) \
+	$(addsuffix $(OPT_BINSUFFIX), $(SBINFILES)) \
 	$(addsuffix .$(OBJSUFFIX), $(MODULES)) \
 	$(addsuffix .$(OPT_OBJSUFFIX), $(MODULES)) \
 	$(addsuffix .$(LIBSUFFIX), $(LIBFILES)) \
 	$(addsuffix .$(OPT_LIBSUFFIX), $(LIBFILES)) \
 	buildsubdirs
 
-$(BINFILES) $(SBINFILES) $(addsuffix .$(OPT_BINSUFFIX), $(BINFILES)) \
-	$(addsuffix .$(OPT_BINSUFFIX), $(SBINFILES)) \
+$(addsuffix $(BINSUFFIX), $(BINFILES)) \
+	$(addsuffix $(BINSUFFIX), $(SBINFILES)) \
+	$(addsuffix $(OPT_BINSUFFIX), $(BINFILES)) \
+	$(addsuffix $(OPT_BINSUFFIX), $(SBINFILES)) \
 	$(addsuffix .$(OBJSUFFIX), $(MODULES)) \
 	$(addsuffix .$(OPT_OBJSUFFIX), $(MODULES)) \
 	$(addsuffix .$(LIBSUFFIX), $(LIBFILES)) \
@@ -110,30 +119,36 @@ $(BUILDSUBDIRS):
 %.cmi: %.mli
 	$(OCAMLC) -c $<
 
-%: $(addsuffix .$(OBJSUFFIX), $(MODULES)) %.$(OBJSUFFIX)
+%$(BINSUFFIX): $(addsuffix .$(OBJSUFFIX), $(MODULES)) %.$(OBJSUFFIX)
 	$(OCAMLC) $(addsuffix .$(LIBSUFFIX), $(LIBRARIES)) \
+		$(addsuffix .$(LIBSUFFIX), $(LIBRARIES-$*)) \
 		$(addsuffix .$(OBJSUFFIX), $(MODULES)) $*.$(OBJSUFFIX) -o $@
 
-%.opt: $(addsuffix .$(OPT_OBJSUFFIX), $(MODULES)) %.$(OPT_OBJSUFFIX)
+%$(OPT_BINSUFFIX): $(addsuffix .$(OPT_OBJSUFFIX), $(MODULES)) %.$(OPT_OBJSUFFIX)
 	$(OPT_OCAMLC) $(addsuffix .$(OPT_LIBSUFFIX), $(LIBRARIES)) \
+	$(addsuffix .$(OPT_LIBSUFFIX), $(LIBRARIES-$*)) \
 	$(addsuffix .$(OPT_OBJSUFFIX), $(MODULES)) $*.$(OPT_OBJSUFFIX) -o $@
 
 rpmver.o: rpmver.c
 	gcc -I $(shell $(OCAMLC) -where) -c $<
 
-install: all
-	for binfile in $(BINFILES); do install -D -m 755 $$binfile \
+install: all $(INSTALL_PRERULE)
+	for binfile in $(BINFILES); do \
+		install -D -m 755 $$binfile$(INSTALL_SUFFIX) \
 			$(INSTALL_PREFIX)/bin/$$binfile; \
-		done
-	for sbinfile in $(SBINFILES); do install -D -m 755 $$sbinfile \
-			$(INSTALL_PREFIX)/sbin/$$binfile; \
-		done
+	done
+	for sbinfile in $(SBINFILES); do \
+		install -D -m 755 $$sbinfile$(INSTALL_SUFFIX) \
+			$(INSTALL_PREFIX)/sbin/$$sbinfile; \
+	done
 
 dist:
 	rm -rf $(DISTNAME)-$(DISTVERSION)
 	mkdir -p $(DISTNAME)-$(DISTVERSION)
 	cp -a $(DISTFILES) $(DISTNAME)-$(DISTVERSION)
+ifneq (,$(BUILDSUBDIRS))
 	cp -a $(BUILDSUBDIRS) $(DISTNAME)-$(DISTVERSION)
+endif
 	for dvf in $(DISTVERSIONFILES); do \
 			sed --in-place "s/vErSiOn/$(DISTVERSION)/g" \
 			$(DISTNAME)-$(DISTVERSION)/$$dvf; \
@@ -144,18 +159,23 @@ dist:
 clean:
 	for i in $(BUILDSUBDIRS); do $(MAKE) -C $$i clean; done
 	rm -f -- *~ *.$(OBJSUFFIX) *.$(OPT_OBJSUFFIX) *.$(LIBSUFFIX) \
-		$(BINFILES) $(addsuffix .$(OPT_BINSUFFIX), $(BINFILES)) \
-		$(SBINFILES) $(addsuffix .$(OPT_BINSUFFIX), $(SBINFILES)) \
-	 	$(DISTNAME)-$(DISTVERSION) $(DISTNAME)-$(DISTVERSION).tar.gz \
+		$(addsuffix $(BINSUFFIX), $(BINFILES)) \
+		$(addsuffix $(OPT_BINSUFFIX), $(BINFILES)) \
+		$(addsuffix $(BINSUFFIX), $(SBINFILES)) \
+		$(addsuffix $(OPT_BINSUFFIX), $(SBINFILES)) \
+	 	$(DISTNAME)-$(DISTVERSION).tar.gz \
 		$(addsuffix .a, $(LIBFILES)) \
 		$(LEXYACC_SRCS) \
 		*.$(OPT_LIBSUFFIX) *.cmi *.o *.deps *.ideps
+	rm -rf -- $(DISTNAME)-$(DISTVERSION)
 
 .PHONY: all install clean buildsubdirs $(BUILDSUBDIRS)
 
 # include dependencies
 ifeq (,$(findstring clean,$(MAKECMDGOALS)))
 -include $(addsuffix .deps, $(MODULES))
+-include $(addsuffix .deps, $(BINFILES))
+-include $(addsuffix .deps, $(SBINFILES))
 -include $(addsuffix .ideps, $(MODULES))
 endif
 
@@ -192,11 +212,19 @@ DISTVERSION = $(shell cat VERSION)
 # additional directory names for ocaml libraries
 LIBDIRS = some_lib_dir
 # make all recursively into these, targets required: [first one], clean
+
 # BUILDSUBDIRS are not automatically added as LIBDIRS
 BUILDSUBDIRS = some_lib_dir
 
+# use ".opt" for optimzied binaries or leave blank to install byte code execs
+INSTALL_SUFFIX = .opt
+
 # the install prefix, useful for make install
 INSTALL_PREFIX = /
+
+# the default install target will depend on this rule
+# can be used to make any addons previous to default installation
+INSTALL_PRERULE = somerule
 
 include Makefile.ocaml
 
@@ -205,6 +233,20 @@ include Makefile.ocaml
 endif
 
 # Changelog
+#
+# 0.4.3
+#  + fixed nasty inconsistent assumptions over implementation bug,
+#    that was caused by missing includes of BIN and SBIN dependencies
+#  + fixed make-dist bug when no mll or mly files are present
+#  + fixed typo which prevented install of sbin files
+#
+# 0.4.2
+#  + support different LIBRARIES addons settings per BINFILES entry
+#    e.g.: LIBRARIES-gsim = lablgtk2/lablgtk lablgtk2/lablgnomecanvas
+#
+# 0.4.1
+#  + windows support (spaces in autodetect-paths)
+#  o fixed clean bug
 #
 # 0.4
 #  + ocamllex and ocamlyacc support

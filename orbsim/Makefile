@@ -9,13 +9,13 @@ OTHERFILES =
 SRCFILES = $(wildcard *.ml *.mli *.mll *.mly) Makefile Makefile.ocaml
 DISTFILES = $(DOCFILES) $(OTHERFILES) $(SRCFILES)
 DISTVERSIONFILES = 
-MODULES = 
-LIBRARIES = bigarray lablgtk cairo cairo_lablgtk
+MODULES = vmbridge
+LIBRARIES = bigarray lablgtk cairo cairo_lablgtk vm
 DISTVERSION = 001
 #  $(shell cat VERSION)
 
-LIBDIRS = +cairo +lablgtk2
-BUILDSUBDIRS = 
+LIBDIRS = +cairo +lablgtk2 ../simulator
+BUILDSUBDIRS =  ../simulator
 
 INSTALL_SUFFIX = .opt
 INSTALL_PREFIX = /
