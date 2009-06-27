@@ -33,6 +33,7 @@ FILE *global_trace = NULL;
 int global_iter;
 machine_state_t global_state;
 machine_inputs_t global_old_inputs;
+double dump_orbit = -1;
 
 static FILE*
 open_trace_file (char *filename, guint32 team_id, guint32 scenario)
@@ -91,6 +92,18 @@ get_pos (machine_state_t *state)
     return v;
 }
 
+static void
+set_dump_orbit (double d)
+{
+    dump_orbit = d;
+}
+
+static void
+clear_dump_orbit (void)
+{
+    dump_orbit = -1;
+}
+
 #if defined(BIN1)
 static void
 print_timestep (machine_state_t *state)
@@ -112,9 +125,13 @@ print_timestep (machine_state_t *state)
     double dx = state->output[4];
     double dy = state->output[5];
 
-    if (dump_file != NULL)
-	fprintf(dump_file, "%d %f %f %f %f 0 1 0 %f %f %f\n", global_iter, state->output[0], state->output[1],
-		sx, sy, sx + dx, sy + dy, sqrt(sx * sx + sy * sy));
+    if (dump_file != NULL) {
+	fprintf(dump_file, "%d %f %f %f %f %d 1 0 ", global_iter, state->output[0], state->output[1],
+		dump_orbit <= 0.0 ? 0 : 1, sx, sy);
+	if (dump_orbit > 0.0)
+	    fprintf(dump_file, "%f ", dump_orbit);
+	fprintf(dump_file, "%f %f %f\n", sx + dx, sy + dy, sqrt(sx * sx + sy * sy));
+    }
 }
 
 static vector_t
@@ -350,6 +367,39 @@ calc_apogee (machine_state_t *state, vector_t thrust, double max_dist, int *num_
     }
 }
 
+static double
+calc_perigee (machine_state_t *state, vector_t thrust, double max_dist, int *num_iters)
+{
+    machine_state_t copy = *state;
+    int i = 0;
+
+    set_thrust(&copy, thrust);
+
+    for (;;) {
+	double old_dist;
+	double new_dist;
+
+	old_dist = distance_from_earth(&copy);
+	timestep(&copy);
+	new_dist = distance_from_earth(&copy);
+	set_thrust(&copy, v_zero);
+
+	if (new_dist >= max_dist) {
+	    if (num_iters != NULL)
+		*num_iters = i;
+	    return max_dist;
+	}
+
+	if (new_dist >= old_dist) {
+	    if (num_iters != NULL)
+		*num_iters = i;
+	    return old_dist;
+	}
+
+	++i;
+    }
+}
+
 static void
 calc_ellipse (machine_state_t *state, vector_t *apogee, vector_t *perigee, int *t_to_apogee, int *t_to_perigee,
 	      get_pos_func_t get_pos_func)
@@ -429,7 +479,12 @@ inject_circular_to_elliptical (machine_state_t *state, double dest_apogee, doubl
 	print_vec(thrust);
 	g_print("\n");
 
-	double apogee = calc_apogee(state, thrust, dest_apogee * 2.0, &num_iters);
+	double apogee;
+
+	if (sign > 0)
+	    apogee = calc_apogee(state, thrust, dest_apogee * 2.0, &num_iters);
+	else
+	    apogee = calc_perigee(state, thrust, dest_apogee * 2.0, &num_iters);
 
 	g_print("apogee is %f after %d iterations\n", apogee, num_iters);
 
@@ -481,11 +536,15 @@ inject_elliptical_to_circular (machine_state_t *state, double sign,
     g_assert(fabs(distance_from_earth(state) - dest_apogee) <= tolerance);
 
     speed_norm = get_norm_speed(state);
-    if (sign < 0)
+    if (sign < 0) {
 	speed_norm = v_mul_scal(speed_norm, -1.0);
+	max = v_abs(get_speed(state));
+    }
 
-    g_print("norm speed is ");
+    g_print("norm speed (%f) is ", sign);
     print_vec(speed_norm);
+    g_print(" russen speed is ");
+    print_vec(v_mul_scal(get_speed(state), sign));
     g_print("\n");
 
     while (min < max) {
@@ -717,6 +776,8 @@ main (int argc, char *argv[])
     print_vec(sat_perigee);
     g_print("\n\n");
 
+    set_dump_orbit(v_abs(sat_perigee));
+
     do_n_timesteps(&global_state, t_to_our_perigee);
 
     set_thrust(&global_state, v_mul_scal(get_norm_speed(&global_state), v_abs(get_speed(&global_state)) / 20.0));
@@ -730,18 +791,15 @@ main (int argc, char *argv[])
 
     g_print("at C: %f\n", c_dist);
 
-    /*
-    set_thrust(&global_state, v_make(-0.153559, 2958.473601));
-    do_n_timesteps(&global_state, 5000);
-    */
-
     num_iters = inject_circular_to_elliptical(&global_state, v_abs(sat_perigee), 1.0);
     do_n_timesteps(&global_state, num_iters);
 
     inject_elliptical_to_circular(&global_state, c_dist < v_abs(sat_perigee) ? 1.0 : -1.0,
 				  v_abs(sat_perigee), 900, 1.0);
 
-    do_n_timesteps(&global_state, 50000);
+    
+
+    clear_dump_orbit();
 #else
 #error bla
 #endif
