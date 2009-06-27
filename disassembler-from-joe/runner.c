@@ -400,7 +400,7 @@ between_angles (double angle, double a1, double a2, double max_diff)
 }
 
 static int
-timestep_until_angle (machine_state_t *state, double angle, double max_dist)
+timestep_until_angle (machine_state_t *state, double angle, double max_dist, gboolean *have_angle)
 {
     double start_angle = get_angle(state);
     double dest_angle = start_angle + angle;
@@ -416,8 +416,11 @@ timestep_until_angle (machine_state_t *state, double angle, double max_dist)
 	set_thrust(state, v_zero);
 	++i;
 
-	if (distance_from_earth(state) >= max_dist)
+	if (distance_from_earth(state) >= max_dist) {
+	    if (have_angle != NULL)
+		*have_angle = FALSE;
 	    return i;
+	}
 
 	double new_angle = get_angle(state);
 
@@ -425,6 +428,8 @@ timestep_until_angle (machine_state_t *state, double angle, double max_dist)
 
 	if (between_angles(dest_angle, old_angle, new_angle, 0.2)) {
 	    g_print("at angle %f (dest angle %f) - dist %f\n", new_angle, dest_angle, distance_from_earth(state));
+	    if (have_angle != NULL)
+		*have_angle = TRUE;
 	    return i;
 	}
 
@@ -443,7 +448,7 @@ calc_distance_after_angle (machine_state_t *state, vector_t thrust, double angle
 
     set_thrust(&copy, thrust);
 
-    i = timestep_until_angle(&copy, angle, max_dist);
+    i = timestep_until_angle(&copy, angle, max_dist, NULL);
     if (num_iters != NULL)
 	*num_iters = i;
 
@@ -498,6 +503,7 @@ main (int argc, char *argv[])
 {
     int num_iters, i;
     double dest_apogee;
+    gboolean have_angle = FALSE;
 
     if (argc > 1)
 	dump_file = fopen(argv[1], "w");
@@ -516,8 +522,12 @@ main (int argc, char *argv[])
 
     num_iters = inject_circular_to_elliptical(&global_state, dest_apogee, 1.0);
     // thrust more
-    set_thrust(&global_state, v_mul_scal(get_thrust(&global_state), 1.05));
-    timestep_until_angle(&global_state, G_PI, dest_apogee * 2.0);
+    set_thrust(&global_state, v_mul_scal(get_thrust(&global_state), 1.25));
+    timestep_until_angle(&global_state, G_PI, dest_apogee * 100.0, &have_angle);
+    if (!have_angle) {
+	g_print("don't have angle\n");
+	return 1;
+    }
 
     /*
     for (i = 0; i < num_iters; ++i) {
