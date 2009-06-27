@@ -273,6 +273,47 @@ v_rotate (vector_t v, double angle)
     return new;
 }
 
+
+/* MATH STUFF */
+
+#define	SIM_G	6.67428e-11
+#define SIM_M	6.0e+24
+#define SIM_R	6.357e+6
+
+#define SIM_mu	(SIM_G*SIM_M)
+
+static double
+m_period(double semi_major)
+{
+    return 2.0*G_PI * sqrt((semi_major * semi_major * semi_major) / SIM_mu);
+}
+
+static double
+m_focal_dist(double apoapsis, double periapsis)
+{
+    return apoapsis - periapsis;
+}
+
+static double
+m_major(double apoapsis, double periapsis)
+{
+    return apoapsis + periapsis;
+}
+
+static double
+m_semi_major(double apoapsis, double periapsis)
+{
+    return m_major(apoapsis, periapsis)/2.0;
+}
+
+static double
+m_eccentricity(double apoapsis, double periapsis)
+{
+    return m_focal_dist(apoapsis, periapsis) / m_major(apoapsis, periapsis);
+}
+
+
+
 static vector_t
 get_norm_speed (machine_state_t *state)
 {
@@ -810,6 +851,9 @@ main (int argc, char *argv[])
     print_vec(our_perigee);
     g_print("\n\n");
 
+    g_print("(math) period : %f\n", m_period(v_abs(v_sub(our_apogee, our_perigee))/2));
+    g_print("(math) eccentricity : %f\n", m_eccentricity(v_abs(our_apogee), v_abs(our_perigee)));
+
     calc_ellipse(&global_state, &sat_apogee, &sat_perigee, &t_to_sat_apogee, &t_to_sat_perigee, get_meet_greet_sat_pos);
 
     g_print("s sat: t to apogee: %d  perigee: %d\n", t_to_sat_apogee, t_to_sat_perigee);
@@ -818,6 +862,9 @@ main (int argc, char *argv[])
     g_print("   perigee (%f) ", v_angle(sat_perigee) / G_PI * 180.0);
     print_vec(sat_perigee);
     g_print("\n\n");
+
+    g_print("(math) period : %f\n", m_period(v_abs(v_sub(sat_apogee, sat_perigee))/2));
+    g_print("(math) eccentricity : %f\n", m_eccentricity(v_abs(sat_apogee), v_abs(sat_perigee)));
 
     set_dump_orbit(v_abs(sat_perigee));
 
