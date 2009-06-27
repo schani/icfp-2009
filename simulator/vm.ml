@@ -33,6 +33,7 @@ type machine_state =
       insnmem: Instructions.instruction array;
       statusreg: bool;
       instruction_pointer:int;
+      (* todo make these faster! *) 
       input_ports: float IntMap.t;
       output_ports: float IntMap.t;
       timestep: int;
@@ -87,7 +88,7 @@ let is_instruction m =
   (read_insn m m.instruction_pointer) <> Instructions.No_Instruction 
     
 let save_result m res = 
-  Printf.printf "schani: v%d:=%f\n" m.instruction_pointer res;
+  (* Printf.printf "schani: v%d:=%f\n" m.instruction_pointer res; *)
   write_data m m.instruction_pointer res;
   m
 
@@ -103,7 +104,7 @@ let read_port m port =
       Not_found -> failwith ("read_port "^(string_of_int port))
 
 let write_port m port data = 
-  (* Printf.printf "writing %f to port %d\n" data port;  *)
+ (* Printf.printf "writing %f to port %d\n" data port;  *)
   {m with output_ports = IntMap.add port data m.output_ports}
 
 let get_comparator = function
@@ -114,16 +115,18 @@ let get_comparator = function
   | GTZ -> (>)
 
 
-let insn_to_string m = function
+let insn_to_string m = function 
+  | S_Instruction (Noop,_,_) -> 
+      Printf.sprintf "S-->%s"  (s_code_to_string Noop)
   | S_Instruction (s,ccode,a) -> 
-      Printf.sprintf "S-->%s %s %d\n(%f)"  (s_code_to_string s)
+      Printf.sprintf "S-->%s %s %d\n(%3.10F)"  (s_code_to_string s)
 	(cmpcode_to_string s ccode) a 
 	(read_data m a)
   | D_Instruction (Phi as d,a1,a2) -> 
       Printf.sprintf "D-->%s %d %d status: %b" 
 	(d_code_to_string d) a1 a2 (read_status m)
   | D_Instruction (d,a1,a2) -> 
-      Printf.sprintf "D-->%s %d %d\n(%f) (%f)" 
+      Printf.sprintf "D-->%s %d %d\n(%3.10F) (%3.10F)" 
 	(d_code_to_string d) a1 a2 
 	(read_data m a1) (read_data m a2)
   | No_Instruction -> "Moo-nop"
@@ -131,7 +134,7 @@ let insn_to_string m = function
 let execute_one_instruction m = 
   let m,insn = fetch_insn m in
   (* Printf.printf "%d %s\n" m.instruction_pointer 
-     (insn_to_string m insn); *)
+     (insn_to_string m insn);  *)
   match insn with
     | No_Instruction -> 
 	m
@@ -229,7 +232,7 @@ let vm_execute m controller =
   let rec loop m = 
     let m = vm_execute_one_step m in
 (*    Array.iteri (fun i f -> Printf.printf "DUMP %d %f\n" i f) m.datamem;*)
-    (*Printf.printf "%c%07d" (Char.chr 0x0d) m.timestep; *)
+    Printf.printf "%c%07d" (Char.chr 0x0d) m.timestep; 
     if ((vm_read_sensor m 0) <> 0.) || (m.timestep = 3000000) then
       (* score written -> eog || 3M timesteps*)
       m
