@@ -1,4 +1,6 @@
 (* vmbridge: interfaces different VMs
+ *
+ *  stamp score fuel x y orbit# [..] sat# [.. ..] rem
  *)
 
 type q = {
