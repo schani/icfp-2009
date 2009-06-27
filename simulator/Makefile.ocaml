@@ -38,7 +38,7 @@ LEXYACC_SRCS = $(addsuffix .ml, $(OCAMLLEX_SRCS)) \
 .SECONDARY: $(LEXYACC_SRCS)
 
 # generic ocaml ops
-OCAMLC_OPS = $(addprefix -I , $(LIBDIRS))
+OCAMLC_OPS = $(addprefix -I , $(LIBDIRS)) -g 
 
 # ocaml native compiler
 OPT_OCAMLC = $(shell which ocamlopt.opt 2>/dev/null || which ocamlopt) \

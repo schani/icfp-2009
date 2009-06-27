@@ -10,14 +10,16 @@ type s_instruction = | Noop
 		     | Input
  
 
-type instruction = | D_Instruction of d_instruction * addr * addr
-		   | S_Instruction of s_instruction * comparison * addr 
+type instruction = 		   
+  | No_Instruction
+  | D_Instruction of d_instruction * addr * addr
+  | S_Instruction of s_instruction * comparison * addr 
 
 
-let zero = S_Instruction (Noop,LTZ,0)
+let zero = No_Instruction
 
 let badcode str code = 
-  failwith (Printf.sprintf "Bad Instruction: %x" code)
+  failwith (Printf.sprintf "Bad Instruction: %s: %x" str code)
 
 
 let shift_right_to_int i32 shift mask = 
@@ -48,16 +50,42 @@ let d_code_of_int = function
   | 0x6 -> Phi 
   | x -> badcode "d_code_of_int" x 
 
+let d_code_to_string = function
+  | Add  -> "Add" 
+  | Sub -> "Sub"
+  | Mult -> "Mult"
+  | Div -> "Div"
+  | Output -> "Output"
+  | Phi -> "Phi" 
+
+let s_code_to_string = function 
+  | Noop -> "Noop" 
+  | Cmpz -> "Cmpz"
+  | Sqrt -> "Sqrt" 
+  | Copy -> "Copy"
+  | Input -> "Input"
+
+let insn_to_string = function
+  | S_Instruction (s,_,_) -> s_code_to_string s
+  | D_Instruction (d,_,_) -> d_code_to_string d
+  | No_Instruction -> "Moo-nop"
+
 let decode_insn insn =
-  match shift_right_to_int insn 28 0xf with 
-    | 0x0 -> (* S_Instruction *)
+  let insn = 
+    match shift_right_to_int insn 28 0xf with 
+      | 0x0 -> (* S_Instruction *)
 	let scode = s_code_of_int  (shift_right_to_int insn 24   0xf) in
-	let ccode = cmpcode_of_int (shift_right_to_int insn 14 0x1ff) in
+	let ccode = match scode with 
+	  | Cmpz -> cmpcode_of_int (shift_right_to_int insn 21 0x7) 
+	  | _ -> EQZ
+	in
 	let r1    = shift_right_to_int insn 0 0x3fff in
 	S_Instruction (scode,ccode,r1)
     | d_code -> 
 	let r1 = shift_right_to_int insn 14 0x3fff in
 	let r2 = shift_right_to_int insn  0 0x3fff in
 	D_Instruction ((d_code_of_int d_code),r1,r2)
+  in
+  insn
 	
 
