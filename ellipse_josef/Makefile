@@ -1,22 +1,22 @@
 # $Id$
 
-DISTNAME = sim 
+DISTNAME = 
 BINFILES = $(DISTNAME)
 SBINFILES =
-LIBFILES = vm
-LIBCOMPS-vm = basic_reader basic_writer instructions vm solve_hohman
+LIBFILES = hohmann
+LIBCOMPS-hohmann = hohmann
 DOCFILES = COPYING LICENSE CHANGELOG VERSION 
 OTHERFILES = $(DISTNAME).spec
 SRCFILES = $(shell echo *.ml *.mli *.mll *.mly) Makefile
 DISTFILES = $(DOCFILES) $(OTHERFILES) $(SRCFILES)
 DISTVERSIONFILES =
-MODULES = basic_reader basic_writer instructions vm solve_hohman
-LIBRARIES = ../ellipse_josef/hohmann
+MODULES = hohmann
+LIBRARIES =
 BINARIES = $(BINFILES) $(SBINFILES)
 DISTVERSION = $(shell cat VERSION)
 
-LIBDIRS =  ../ellipse_josef
-BUILDSUBDIRS = ../ellipse_josef/
+LIBDIRS =
+BUILDSUBDIRS = 
 REBUILDSUBDIRS = 
 
 INSTALL_PREFIX = /
