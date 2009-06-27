@@ -20,9 +20,10 @@ let input_insn ic =
     
 let open_obf filename = 
   let ic = open_in_bin filename in
-  ic,0
+  ic,-1
 
 let basic_read_memory_line (ic,i) = 
+  let i = i + 1 in
   let data,insn = 
     if i mod 2 = 0 then (* even: *)
       let data = input_data ic in
@@ -33,7 +34,7 @@ let basic_read_memory_line (ic,i) =
       let data = input_data ic in
       (data,insn)
   in
-  (data,insn),(ic,i+1)
+  (data,insn),(ic,i)
       
       
     

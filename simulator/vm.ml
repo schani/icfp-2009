@@ -79,23 +79,32 @@ let alloc_machine problem =
   }
 
 let fetch_insn m = 
-  m := {!m with instruction_pointer = !m.instruction_pointer + 1};
-  read_insn !m !m.instruction_pointer
+  let m = {m with instruction_pointer = m.instruction_pointer + 1} in
+  let insn = read_insn m m.instruction_pointer in
+  m,insn
 
+let is_instruction m = 
+  (read_insn m m.instruction_pointer) <> Instructions.No_Instruction 
+    
 let save_result m res = 
-  write_data !m !m.instruction_pointer res
+  Printf.printf "schani: v%d:=%f\n" m.instruction_pointer res;
+  write_data m m.instruction_pointer res;
+  m
 
 let read_status m = 
-  !m.statusreg
+  m.statusreg
 
 let read_port m port = 
   try 
-    IntMap.find port m.input_ports
+    let result = IntMap.find port m.input_ports in
+    (* Printf.printf "reading from port %d -> %f\n" port result; *)
+    result
   with 
       Not_found -> failwith ("read_port "^(string_of_int port))
 
 let write_port m port data = 
-  m := {!m with output_ports = IntMap.add port data !m.output_ports}
+  (* Printf.printf "writing %f to port %d\n" data port;  *)
+  {m with output_ports = IntMap.add port data m.output_ports}
 
 let get_comparator = function
   | LTZ -> (<)
@@ -104,57 +113,65 @@ let get_comparator = function
   | GEZ -> (>=)
   | GTZ -> (>)
 
+
+let insn_to_string m = function
+  | S_Instruction (s,ccode,a) -> 
+      Printf.sprintf "S-->%s %s %d\n(%f)"  (s_code_to_string s)
+	(cmpcode_to_string s ccode) a 
+	(read_data m a)
+  | D_Instruction (Phi as d,a1,a2) -> 
+      Printf.sprintf "D-->%s %d %d status: %b" 
+	(d_code_to_string d) a1 a2 (read_status m)
+  | D_Instruction (d,a1,a2) -> 
+      Printf.sprintf "D-->%s %d %d\n(%f) (%f)" 
+	(d_code_to_string d) a1 a2 
+	(read_data m a1) (read_data m a2)
+  | No_Instruction -> "Moo-nop"
+
 let execute_one_instruction m = 
-  match fetch_insn m with
+  let m,insn = fetch_insn m in
+  (* Printf.printf "%d %s\n" m.instruction_pointer 
+     (insn_to_string m insn); *)
+  match insn with
     | No_Instruction -> 
-	`Done
+	m
     | S_Instruction (Noop,_,_) ->
-	`More
+	m
     | S_Instruction (Cmpz,comp,addr) ->
-	m := {!m with statusreg = ((get_comparator comp) (read_data !m addr) 0.)};
-	`More
+	{m with statusreg = ((get_comparator comp) (read_data m addr) 0.)}
     | S_Instruction (Sqrt,_,addr) -> 
-	let result = sqrt (read_data !m addr) in
-	save_result m result;
-	`More
+	let result = sqrt (read_data m addr) in
+	save_result m result
     | S_Instruction (Copy,_,addr) ->
-	save_result m (read_data !m addr);
-	`More
+	save_result m (read_data m addr)
     | S_Instruction (Input,_,addr) -> 
-	save_result m (read_port !m addr);
-	`More
+	save_result m (read_port m addr)
 
     | D_Instruction (Output,port,addr) -> 
-	write_port m port (read_data !m addr);
-	`More
+	write_port m port (read_data m addr)
     | D_Instruction (Phi,r1,r2) ->
-	save_result m (read_data !m (if read_status m then r1 else r2));
-	`More
+	save_result m (read_data m (if read_status m then r1 else r2))
     | D_Instruction (Div,r1,r2) -> 
-	let op1 = read_data !m r1 in
-	let op2 = read_data !m r2 in
+	let op1 = read_data m r1 in
+	let op2 = read_data m r2 in
 	save_result m
 	  (if op2 = 0. then
 	    0.
 	  else
-	    ( /. ) op1 op2);
-	`More
+	    ( /. ) op1 op2)
     | D_Instruction (Add,r1,r2) -> 
-	let op1 = read_data !m r1 in
-	let op2 = read_data !m r2 in
-	save_result m (( +. ) op1 op2);
-	`More
+	let op1 = read_data m r1 in
+	let op2 = read_data m r2 in
+	save_result m (( +. ) op1 op2)
     | D_Instruction (Mult,r1,r2) -> 
-	let op1 = read_data !m r1 in
-	let op2 = read_data !m r2 in
-	save_result m (( *. ) op1 op2);
-	`More
+	let op1 = read_data m r1 in
+	let op2 = read_data m r2 in
+	save_result m (( *. ) op1 op2)
     | D_Instruction (Sub,r1,r2) -> 
-	let op1 = read_data !m r1 in
-	let op2 = read_data !m r2 in
-	save_result m (( -. ) op1 op2);
-	`More
-	  	
+	let op1 = read_data m r1 in
+	let op2 = read_data m r2 in
+	save_result m (( -. ) op1 op2)
+
     
 let write_actuator m portno data = 
   {m with input_ports = IntMap.add portno data m.input_ports}
@@ -187,8 +204,8 @@ let vm_init_machine problem =
 	m
 
 let vm_configure m config = 
-  let m = vm_write_actuator m DeltaX 0. in
-  let m = vm_write_actuator m DeltaY 0. in
+  let m = vm_write_actuator m DeltaX 0E0 in
+  let m = vm_write_actuator m DeltaY 0E0 in
   if check_config m.problem config then 
     write_actuator m 0x3E80 (float_of_int config)
   else
@@ -198,15 +215,20 @@ let vm_configure m config =
 (* this executes "one simulation step, i.e., 1 sec "*)
 let vm_execute_one_step m = 
   (* let m = {m with datamem = Array.copy m.datamem} in *)
-  let m = ref m in
-  while execute_one_instruction m <> `Done do
-    ()
-  done;
-  {!m with timestep = !m.timestep + 1; instruction_pointer = -1; }
+  let rec loop m = 
+    let m = execute_one_instruction m in
+    if is_instruction m then
+      loop m
+    else
+      m	
+  in
+  let m = loop m in
+  {m with timestep = m.timestep + 1; instruction_pointer = -1; }
 
 let vm_execute m controller = 
   let rec loop m = 
     let m = vm_execute_one_step m in
+(*    Array.iteri (fun i f -> Printf.printf "DUMP %d %f\n" i f) m.datamem;*)
     (*Printf.printf "%c%07d" (Char.chr 0x0d) m.timestep; *)
     if ((vm_read_sensor m 0) <> 0.) || (m.timestep = 3000000) then
       (* score written -> eog || 3M timesteps*)
@@ -215,6 +237,6 @@ let vm_execute m controller =
       loop (controller m)
   in
   let m = loop m in 
-  print_string "muhkuh\n";
+  Printf.printf "muhkuh scored: %f\n" (vm_read_sensor m 0);
   m 
     

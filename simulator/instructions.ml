@@ -65,10 +65,16 @@ let s_code_to_string = function
   | Copy -> "Copy"
   | Input -> "Input"
 
-let insn_to_string = function
-  | S_Instruction (s,_,_) -> s_code_to_string s
-  | D_Instruction (d,_,_) -> d_code_to_string d
-  | No_Instruction -> "Moo-nop"
+let cmpcode_to_string opcode ccode = 
+  if opcode <> Cmpz then 
+    "xx"
+  else
+    match ccode with
+      | LTZ -> "< "
+      | LEZ -> "<="
+      | EQZ -> "=="
+      | GEZ -> ">="
+      | GTZ -> "> "
 
 let decode_insn insn =
   let insn = 
