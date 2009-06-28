@@ -6,6 +6,7 @@
 *)
 
 open GMain
+open Printf
 
 (*
 let diewoed = Cairo_png.image_surface_create_from_file "/tmp/erde.png"
@@ -28,6 +29,7 @@ let rgb_cyan =    0.0, 1.0, 1.0
 let rgb_magenta = 1.0, 0.0, 1.0
 let rgb_gray =    0.1, 0.1, 0.1
 let rgb_black =   0.0, 0.0, 0.0
+let rgb_orange =  1.0, 0.6, 0.0
 
 let our_x = ref 0.0
 let our_y = ref 0.0
@@ -35,6 +37,8 @@ let our_orbits = ref []
 let our_sats = ref []
 let our_moons = ref []
 let our_massband = ref None
+let our_fuelstations = ref []
+let our_debugstations = ref []
 
 let limit_x1 = ref (0.0 -. earth_r *. 2.0)
 let limit_y1 = ref (0.0 -. earth_r *. 2.0)
@@ -83,7 +87,7 @@ let vc' spasc value' =
   value' *. spasc.spaceview_height /. spasc.screen_height
 
 let spasc_dump spasc =
-  Printf.fprintf stderr "SPASC: zoom=%f, speed=%i, screen=%fx%f\n     sv_x=%f, sv_x=%f, sv=%fx%f\n"
+  fprintf stderr "SPASC: zoom=%f, speed=%i, screen=%fx%f\n     sv_x=%f, sv_x=%f, sv=%fx%f\n"
     spasc.zoom spasc.speed spasc.screen_width spasc.screen_height
     spasc.spaceview_x spasc.spaceview_y
     spasc.spaceview_width spasc.spaceview_height;
@@ -155,6 +159,18 @@ let paint_circle surface x y r =
   Cairo.arc surface x y r 0. two_pi;
   Cairo.stroke surface
 
+let paint_diamond surface x y r =
+  Cairo.move_to surface (x -. r) y;
+  Cairo.line_to surface x (x -. r);
+  Cairo.line_to surface (x +. r) y;
+  Cairo.line_to surface x (x +. r);
+  Cairo.line_to surface (x -. r) y;
+  Cairo.stroke surface
+
+let paint_square surface x y r =
+  Cairo.rectangle surface (x -. r) (y -. r) r r;
+  Cairo.stroke surface
+
 let show_trace ?(color=rgb_cyan) surface spasc points =
   paint_trace ~color surface
     (List.map (fun (x,y) -> (ccx spasc x), (ccy spasc y)) points)
@@ -176,6 +192,20 @@ let show_sat ?(r=3.0) ?(color=rgb_white) surface spasc x y =
 let show_sats ?(color=rgb_red) surface spasc sats =
   List.iter (fun (x, y) -> show_sat  ~r:4.5 ~color surface spasc x y) sats
 
+let show_fuelstation ?(r=3.5) ?(color=rgb_orange) surface spasc x y =
+  set_color surface rgb_black;
+  paint_circle surface (ccx spasc x) (ccy spasc y) r
+
+let show_fuelstations ?(r=3.5) ?(color=rgb_orange) surface spasc fusts =
+  List.iter (fun (x, y) -> show_fuelstation ~r ~color surface spasc x y) fusts
+
+let show_debugstation ?(r=5.0) ?(color=rgb_orange) surface spasc x y =
+  set_color surface color;
+  paint_square surface (ccx spasc x) (ccy spasc y) r
+
+let show_debugstations ?(r=3.5) ?(color=rgb_orange) surface spasc debs =
+  List.iter (fun (x, y) -> show_debugstation ~r ~color surface spasc x y) debs
+
 let show_earth surface spasc =
   set_color surface rgb_green;
   paint_filled_circle surface (ccx spasc 0.0) (ccy spasc 0.0)
@@ -193,7 +223,7 @@ let show_massband surface spasc = function
       paint_line surface x1 y1 x2 y2;
       let f = sqrt ((x1-.x2)*.(x1-.x2) +. (y1-.y2)*.(y1-.y2))
       in let dist = vc' spasc f
-      in let msg = Printf.sprintf "%fkm" (dist /. 1000.0)
+      in let msg = sprintf "%fkm" (dist /. 1000.0)
       in let extent = Cairo.text_extents surface msg
       in let msg_len = extent.Cairo.text_width
       in let text_adder = (f -. msg_len) /. 2.0
@@ -298,7 +328,7 @@ let make_orbit_window () =
     xruler#set_upper !limit_x2;
     *)
        (*
-	 Printf.fprintf stderr "ruler y to lower=%f upper=%f\n"
+	 fprintf stderr "ruler y to lower=%f upper=%f\n"
 	 spasc.spaceview_y1 (spasc.spaceview_y1 +. spasc.spaceview_height);
 	 flush stderr;
        *)
@@ -331,10 +361,13 @@ let make_orbit_window () =
     hbox2#pack ~expand:false !status_line#coerce;
     ignore (GMisc.label ~text:"" ~packing:(hbox2#pack ~expand:true) ());
     da#misc#realize ();
+    (*
+    let mousepos = GMisc.label ~text:"" ~packing:(hbox1#pack ~expand:false) ()
+    in *)
     let q = if Array.length Sys.argv > 1 then
-      Vmbridge.setup_file Sys.argv.(1)
-    else
-      failwith "biely mode not yet active.."
+	Vmbridge.setup_file Sys.argv.(1)
+      else
+	failwith "biely mode not yet active.."
     in let d = new GDraw.drawable (da#misc#window)
     in let redraw_all _ =
       let da_width, da_height = Gdk.Drawable.get_size (da#misc#window)
@@ -356,6 +389,8 @@ let make_orbit_window () =
 	  show_trace surface ~color:rgb_white spasc !our_history;
 	  show_traces surface spasc our_sats_histories;
 	  show_massband surface spasc !our_massband;
+	  show_debugstations surface ~color:rgb_orange spasc !our_debugstations;
+	  show_fuelstations surface ~color:rgb_black spasc !our_fuelstations;
 	  (*
 	  Cairo.set_source_surface surface diewoed 10.0 100.0;
 	  Cairo.paint surface;
@@ -393,13 +428,15 @@ let make_orbit_window () =
 	      end;
 	    record_more_traces sats;
 	    update_status_line
-	      (Printf.sprintf "[%i] Score=%f Fuel=%f x=%f y=%f | %s"
+	      (sprintf "[%i] Score=%f Fuel=%f x=%f y=%f | %s"
 		 stamp score fuel x y rem);
 	    our_x := x;
 	    our_y := y;
 	    our_orbits := orbits;
 	    our_sats := sats;
 	    our_moons := moons;
+	    our_fuelstations := fusts;
+	    our_debugstations := debugs;
 	    ignore (redraw_all ());
 	    install_timeout_handler ();
 	end;
@@ -475,6 +512,11 @@ let make_orbit_window () =
 	      our_massband := Some (sx, sy, mx, my);
 	      refresh_da da
 	  end;
+	  (*
+	  mousepos#set_text (sprintf "Mouse at: %f, %f"
+			       ((vc' spasc mx) +. spasc.spaceview_x)
+			       ((vc' spasc my) +. spasc.spaceview_y));
+	  *)
 	  false
        and scroll_callback ev =
 	match GdkEvent.get_type ev with
