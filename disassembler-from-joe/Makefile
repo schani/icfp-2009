@@ -4,6 +4,7 @@ asms :
 	./disassembler.py -d < ../angabe/bin1.obf > bin1.asm
 	./disassembler.py -d < ../angabe/bin2.obf > bin2.asm
 	./disassembler.py -d < ../angabe/bin3.obf > bin3.asm
+	./disassembler.py -d < ../angabe/bin4.obf > bin4.asm
 
 runner1 : runner.c bin1.c
 	gcc -o runner1 -DBIN1 -g -Wall -std=c99 runner.c -lm `pkg-config --cflags --libs glib-2.0`

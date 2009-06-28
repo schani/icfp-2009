@@ -13,7 +13,7 @@ let diewoed = Cairo_png.image_surface_create_from_file "/tmp/erde.png"
 *)
 
 let earth_r = 6357000.0
-let moon_r =  1736000.0 (* mycrometer genau! *)
+let moon_r =  1738000.0 (* mycrometer genau! *)
 let initial_zoom = 1234.0
 let initial_speed = 10
 let initial_fps = 25
@@ -302,14 +302,14 @@ let status_line = ref (GMisc.label ~text:"Statusline" ~justify:`FILL ())
 let update_status_line = (!status_line)#set_text
 
 let make_orbit_window () =
-  let spasc = { zoom = earth_r /. 20.0 *. initial_zoom;
+  let spasc = { zoom = 1.0;
 		speed = initial_speed;
 		screen_height = 500.0;
 		screen_width = 500.0;
 		spaceview_x = 0.0;
 		spaceview_y = 0.0;
-		spaceview_width = 2.0 *. initial_zoom;
-		spaceview_height = 2.0 *. initial_zoom;
+		spaceview_width = 2.0;
+		spaceview_height = 2.0;
 	      }
   in let w = GWindow.window ~height:500 ~width:500 ()
   in let vbox = GPack.vbox ~packing:w#add ~homogeneous:false ()
@@ -327,6 +327,7 @@ let make_orbit_window () =
       ~packing:(table#attach ~left:0 ~right:1 ~top:1 ~bottom:2 ~fill:`BOTH) ()
   in let hbox1 = GPack.hbox ~packing:(vbox#pack ~expand:false) ()
   in let hbox2 = GPack.hbox ~packing:(vbox#pack ~expand:false) ()
+  in let hbox3 = GPack.hbox ~packing:(vbox#pack ~expand:false) ()
   in let bplay = GButton.button ~label:"Play" ~packing:hbox1#pack ()
   in let _ = GMisc.label ~text:"Zoom:"
       ~packing:(hbox1#pack ~expand:false) ()
@@ -382,15 +383,18 @@ let make_orbit_window () =
     ignore (GMisc.label ~text:"FPS:" ~packing:(hbox1#pack ~expand:false) ());
     ignore (GEdit.spin_button ~adjustment:framer ~rate:0. ~digits:1 ~width:50
 	      ~packing:hbox1#pack ());
-    hbox2#pack ~expand:false !status_line#coerce;
-    ignore (GMisc.label ~text:"" ~packing:(hbox2#pack ~expand:true) ());
-    da#misc#realize ();
-    let mousepos = GMisc.label ~text:"" ~packing:(hbox1#pack ~expand:false) ()
-    in let q = if Array.length Sys.argv > 1 then
-	Vmbridge.setup_file Sys.argv.(1)
-      else
-	failwith "biely mode not yet active.."
-    in let d = new GDraw.drawable (da#misc#window)
+    let resetview_button =
+      GButton.button ~label:"Reset View" ~packing:hbox1#pack ()
+    in
+      hbox3#pack ~expand:false !status_line#coerce;
+      ignore (GMisc.label ~text:"" ~packing:(hbox3#pack ~expand:true) ());
+      da#misc#realize ();
+      let mousepos = GMisc.label ~text:"" ~packing:(hbox2#pack ~expand:false) ()
+      in let q = if Array.length Sys.argv > 1 then
+	  Vmbridge.setup_file Sys.argv.(1)
+	else
+	  failwith "biely mode not yet active.."
+     in let d = new GDraw.drawable (da#misc#window)
     in let redraw_all _ =
       let da_width, da_height = Gdk.Drawable.get_size (da#misc#window)
       in let pixmap = GDraw.pixmap ~width:da_width ~height:da_height ()
@@ -610,6 +614,11 @@ let make_orbit_window () =
       ignore (bplay#connect#clicked ~callback:
 		(function () ->
 		   if !playing then stop_playing () else start_playing ()));
+      ignore (resetview_button#connect#clicked ~callback:
+		(function () ->
+		   spasc.spaceview_x <- 0.0;
+		   spasc.spaceview_y <- 0.0;
+		   zoomer#set_value initial_zoom));
       let da_width, da_height = Gdk.Drawable.get_size (da#misc#window)
       in
 	resize_screen spasc da_width da_height;
