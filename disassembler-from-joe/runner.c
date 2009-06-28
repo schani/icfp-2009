@@ -14,7 +14,7 @@ typedef void (*compare_init_func_t) (guint32 n, gpointer user_data);
 typedef void (*set_new_value_func_t) (guint32 addr, double new_value, gpointer user_data);
 
 #if defined(BIN1)
-#define SCENARIO	1001
+#define SCENARIO	1004
 #include "bin1.c"
 #elif defined(BIN2)
 #define SCENARIO	2001
@@ -22,6 +22,9 @@ typedef void (*set_new_value_func_t) (guint32 addr, double new_value, gpointer u
 #elif defined(BIN3)
 #define SCENARIO	3003
 #include "bin3.c"
+#elif defined(BIN4)
+#define SCENARIO        4004
+#include "bin4.c"
 #else
 #error bla
 #endif
@@ -153,6 +156,41 @@ get_meet_greet_sat_pos (machine_state_t *state)
 
     return v;
 }
+#elif defined(BIN4)
+/*
+ * because the lack of visualization support of fuel stations it is handled as moon 2 ;)
+ */
+
+static void
+print_timestep (machine_state_t *state)
+{
+    int max_sat = 12; //how much satellites should be visualized
+
+    double sx = -state->output[2];
+    double sy = -state->output[3];
+    
+    double fuelx = state->output[4];
+    double fuely = state->output[5];
+
+    double moonx = state->output[0x64];
+    double moony = state->output[0x65];
+
+
+    
+    if (dump_file != NULL) {
+        fprintf(dump_file, "%d %f %f %f %f 0 %d 2 ", global_iter, state->output[0], state->output[1],
+                sx, sy, max_sat);
+	for (int i=0; i<max_sat; ++i){
+		double dx = state->output[3*i+7];
+                double dy = state->output[3*i+8];
+		fprintf(dump_file, "%f %f ", sx + dx, sy + dy);
+	}
+        fprintf(dump_file, "%f %f %f %f\n", sx + moonx, sy + moony,  sx + fuelx, sy + fuely);
+    }
+}   
+
+
+
 #else
 #error bla
 #endif
