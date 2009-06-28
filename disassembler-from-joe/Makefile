@@ -31,3 +31,7 @@ bin3.c : disassembler.py
 
 bin4.c : disassembler.py
 	./disassembler.py -c < ../angabe/bin4.obf > bin4.c
+
+
+t34test : t34test.c
+	gcc -Wall -O3 -lm -o t34test t34test.c
