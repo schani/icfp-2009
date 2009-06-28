@@ -41,20 +41,21 @@ let step m frames =
 	  (m, frames)
     | _ -> (m, frames);;
 
-
-let run_simulation osf_filename =
+let run_simulation osf_filename = 
   let (config_id, framelist) = read_osf_file osf_filename in
   let problem_type = config_to_problem config_id  in
   let m = vm_init_machine problem_type in
   let m = vm_configure m config_id in
   let m = vm_set_output_filename m (osf_filename^".simulated.osf") in
   let writer,closer = open_writer m.outputfilename m in
+  let dump = get_emp_dump_writer (open_out  (osf_filename^".simulated.osf.emp") ) in
   let rec loop m frames = 
     if not (vm_is_done m) then
       begin
 	(*      Printf.printf "%d \n " t; *)
 	let (m, frames) = step m frames in
 	  begin
+	    dump m;
 	    let m = writer m in
             let m = vm_execute_one_step m in
 	      loop m frames 
@@ -68,4 +69,3 @@ let run_simulation osf_filename =
       closer m;
       Printf.printf "muhkuh scored: %f in move %d\n" score m.timestep;
       score;;
-    
