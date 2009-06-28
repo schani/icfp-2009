@@ -27,14 +27,14 @@ let read_header ic =
   let cafebabe =Int32.to_int (input_int32 ic) in
   let team_id = Int32.to_int (input_int32 ic) in
   let scenario_id = Int32.to_int (input_int32 ic) in
-    Printf.printf "Header: %x %d %d\n" cafebabe team_id scenario_id;
+(*    Printf.printf "Header: %x %d %d\n" cafebabe team_id scenario_id;*)
     scenario_id;;
 
 (* read an int32, float64 tupl - returns (int, float) *)
 let read_value ic =
   let addr = Int32.to_int (input_int32 ic) in
   let value = input_float ic in
-  Printf.printf "  [%d, %f]" addr value;
+(*  Printf.printf "  [%d, %f]" addr value;*)
   (addr, value);;
 
 (* read a time frame
@@ -45,12 +45,12 @@ let read_frame ic =
   let t = Int32.to_int (input_int32 ic) in
   let c = Int32.to_int (input_int32 ic) in
   let data = ref [] in
-  Printf.printf "%d (c:%d): " t c;
+(*  Printf.printf "%d (c:%d): " t c;*)
   for i = 1 to c do
     let v = read_value (ic) in
       data := v :: !data; 
   done;
-  Printf.printf "\n";
+(*  Printf.printf "\n";*)
   (t, !data);;
   
 (* read and parse an osf file
@@ -60,7 +60,7 @@ let read_frame ic =
 let read_osf_file filename =
   let ic = open_osf filename in
   let frames = ref [] in
-  Printf.printf "Read file %s\n" filename; 
+(*  Printf.printf "Read file %s\n" filename; *)
     let scenario_id = read_header ic in
   try
     while true do
