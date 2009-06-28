@@ -36,16 +36,9 @@ let setup_file filename =
 		    ~moons:(((float_of_string moonx),
 			     (float_of_string moony)) :: moons)
 		    orbitcount satcount (mooncount - 1) r
-	      | _ ->
-		  (List.rev orbits), (List.rev sats), (List.rev moons), "REM"
-		    (*
-	      | [] ->
-		  Printf.fprintf stderr "DER ..IS LEER*\n"; flush stderr;
-		  raise (Parse_error "parse_zeug failed")
-	      | _ ->
-		  Printf.fprintf stderr "MUELL IM VOID *\n"; flush stderr;
-		  raise (Parse_error "parse_zeug failed")
-		    *)
+	      | rest ->
+		  ((List.rev orbits), (List.rev sats), (List.rev moons),
+		   String.concat " " rest)
 	in
 	let line = input_line ifi
 	in

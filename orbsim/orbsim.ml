@@ -5,9 +5,6 @@
    + pan (aber keine floete)
    + trace
    + ruler
-   + fadenkreuz wenn erde zu klein
-   + sat nicht rot
-   + andere sats groesser 1-2 pixel
 *)
 
 open GMain
@@ -197,11 +194,11 @@ let show_massband surface spasc = function
       set_color surface rgb_red;
       paint_line surface x1 y1 x2 y2;
       let f = sqrt ((x1-.x2)*.(x1-.x2) +. (y1-.y2)*.(y1-.y2))
-      in let msg = Printf.sprintf "%fm" f
+      in let dist = vc' spasc f
+      in let msg = Printf.sprintf "%fkm" (dist /. 1000.0)
       in let extent = Cairo.text_extents surface msg
       in let msg_len = extent.Cairo.text_width
       in let text_adder = (f -. msg_len) /. 2.0
-      in let dist = vc' spasc f
       in let ang1 = (atan2 (y2 -. y1) (x2 -. x1));
       in let xtext, ytext, xadder, yadder =
 	  if abs_float ang1 < (pi /. 2.0) then (* right side *)
@@ -252,6 +249,7 @@ let make_orbit_window () =
       ~vpolicy:`AUTOMATIC ~packing:(vbox#pack ~expand:true) ()
   in let da = GMisc.drawing_area ~packing:scrollwin#add ()
   in let hbox1 = GPack.hbox ~packing:(vbox#pack ~expand:false) ()
+  in let hbox2 = GPack.hbox ~packing:(vbox#pack ~expand:false) ()
   in let bplay = GButton.button ~label:"Play" ~packing:hbox1#pack ()
   in let _ = GMisc.label ~text:"Zoom:"
       ~packing:(hbox1#pack ~expand:false) ()
@@ -280,7 +278,8 @@ let make_orbit_window () =
     ignore (GMisc.label ~text:"Speed:" ~packing:(hbox1#pack ~expand:false) ());
     ignore (GEdit.spin_button ~adjustment:speeder ~rate:0. ~digits:3 ~width:100 
 	      ~packing:hbox1#pack ());
-    vbox#pack !status_line#coerce;
+    hbox2#pack ~expand:false !status_line#coerce;
+    ignore (GMisc.label ~text:"" ~packing:(hbox2#pack ~expand:true) ());
     da#misc#realize ();
     let q = if Array.length Sys.argv > 1 then
       Vmbridge.setup_file Sys.argv.(1)
@@ -426,16 +425,18 @@ let make_orbit_window () =
 	  false
        and scroll_callback ev =
 	match GdkEvent.get_type ev with
-	  | `SCROLL ->(*
-	      Printf.fprintf stderr "scroller heusler at %f, %f\n"
-		(GdkEvent.Scroll.x ev) (GdkEvent.Scroll.y ev);
-	      flush stderr; *)
+	  | `SCROLL ->
 	      if GdkEvent.Scroll.direction ev = `UP then
-		zoomer#set_value (zoomer#value +. 20.0);
+		if zoomer#value <= 20.0 then
+		  zoomer#set_value (zoomer#value +. 3.0)
+		else
+		  zoomer#set_value (zoomer#value +. 20.0);
 	      if GdkEvent.Scroll.direction ev = `DOWN then
-		zoomer#set_value (zoomer#value -. 20.0);
+		if zoomer#value <= 20.0 then
+		  zoomer#set_value (zoomer#value -. 3.0)
+		else
+		  zoomer#set_value (zoomer#value -. 20.0);
 	      true
-	  | _ -> false
     in
       ignore (da#event#connect#expose ~callback:redraw_all);
       ignore (da#event#connect#button_press mbutton_callback);
