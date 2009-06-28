@@ -14,7 +14,7 @@ let diewoed = Cairo_png.image_surface_create_from_file "/tmp/erde.png"
 
 let earth_r = 6357000.0
 let moon_r =  1736000.0 (* mycrometer genau! *)
-let initial_zoom = 100.0
+let initial_zoom = 1234.0
 let initial_speed = 10
 let initial_fps = 25
 let pi = atan 1. *. 4.0
