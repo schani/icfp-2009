@@ -1,6 +1,10 @@
 #include <glib.h>
 #include <math.h>
 #include <stdio.h>
+#include <fenv.h>
+#include <getopt.h>
+#include <string.h>
+#include <stdlib.h>
 
 #define MAX_TIMESTEPS		3000000
 #define WINNING_RADIUS		1000.0
@@ -18,16 +22,12 @@ typedef void (*compare_init_func_t) (guint32 n, gpointer user_data);
 typedef void (*set_new_value_func_t) (guint32 addr, double new_value, gpointer user_data);
 
 #if defined(BIN1)
-#define SCENARIO	1004
 #include "bin1.c"
 #elif defined(BIN2)
-#define SCENARIO	2001
 #include "bin2.c"
 #elif defined(BIN3)
-#define SCENARIO	3002
 #include "bin3.c"
 #elif defined(BIN4)
-#define SCENARIO        4004
 #include "bin4.c"
 #else
 #error bla
@@ -43,6 +43,24 @@ FILE *global_trace = NULL;
 machine_state_t global_state;
 machine_inputs_t global_old_inputs;
 double dump_orbit = -1;
+
+static void
+set_input (machine_state_t *state, guint32 addr, double value)
+{
+    switch (addr) {
+	case 2 :
+	    state->inputs.input_2 = value;
+	    break;
+	case 3 :
+	    state->inputs.input_3 = value;
+	    break;
+	case 16000 :
+	    state->inputs.input_16000 = value;
+	    break;
+	default :
+	    g_assert_not_reached();
+    }
+}
 
 static FILE*
 open_trace_file (char *filename, guint32 team_id, guint32 scenario)
@@ -921,22 +939,109 @@ constant_skip_size_func (machine_state_t *state, gpointer user_data)
 }
 #endif
 
+static void
+run_trace_file (FILE *file, machine_state_t *state)
+{
+    guint32 magic, team, scenario;
+    guint32 timestep, count, addr;
+    double val;
+    int i;
+
+    fread(&magic, 4, 1, file);
+    g_assert(magic == 0xcafebabe);
+
+    fread(&team, 4, 1, file);
+    g_print("team %d\n", team);
+
+    fread(&scenario, 4, 1, file);
+    g_print("scenario %d\n", scenario);
+
+    for (;;) {
+	fread(&timestep, 4, 1, file);
+	fread(&count, 4, 1, file);
+
+	g_assert(timestep >= state->num_timesteps_executed);
+	do_n_timesteps(state, timestep - state->num_timesteps_executed);
+	g_assert(timestep == state->num_timesteps_executed);
+
+	if (count == 0) {
+	    g_print("terminated on timestep %d\n", timestep);
+	    break;
+	}
+
+	for (i = 0; i < count; ++i) {
+	    fread(&addr, 4, 1, file);
+	    fread(&val, 8, 1, file);
+
+	    set_input(state, addr, val);
+
+	    g_print("in timestep %d addr %d val %f\n", timestep, addr, val);
+	}
+    }
+
+    g_print("score %f\n", state->output[0]);
+}
+
 int
 main (int argc, char *argv[])
 {
+    FILE *trace_input_file = NULL;
     int num_iters, i;
     double dest_apogee;
     gboolean have_angle = FALSE;
+    char *global_trace_name = NULL;
+    int opt;
+    int scenario = -1;
 
-    if (argc > 1)
-	dump_file = fopen(argv[1], "w");
+    //fesetround(FE_TOWARDZERO);
 
-    global_trace = open_trace_file("/tmp/trace.osf", 19, SCENARIO);
+    while ((opt = getopt(argc, argv, "d:i:t:s:")) != -1) {
+	switch (opt) {
+	    case 'd' :
+		dump_file = fopen(optarg, "w");
+		g_assert(dump_file != NULL);
+		break;
+
+	    case 'i' :
+		trace_input_file = fopen(optarg, "r");
+		g_assert(trace_input_file != NULL);
+		break;
+
+	    case 't' :
+		global_trace_name = g_strdup(optarg);
+		break;
+
+	    case 's' :
+		scenario = atoi(optarg);
+		break;
+
+	    default :
+		g_assert_not_reached();
+	}
+    }
+
+    if (trace_input_file == NULL && scenario < 0) {
+	g_print("need scenario\n");
+	return 1;
+    }
+
+    if (trace_input_file != NULL && global_trace_name != NULL) {
+	g_print("cannot have both input and output traces\n");
+	return 1;
+    }
+
+    if (global_trace_name != NULL)
+	global_trace = open_trace_file(global_trace_name, 19, scenario);
 
     init_machine(&global_state);
     global_old_inputs = global_state.inputs;
 
-    global_state.inputs.input_16000 = SCENARIO;
+    if (trace_input_file != NULL) {
+	run_trace_file(trace_input_file, &global_state);
+	return 0;
+    }
+
+    global_state.inputs.input_16000 = scenario;
 
     global_timestep();
 
