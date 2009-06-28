@@ -14,7 +14,7 @@ typedef void (*compare_init_func_t) (guint32 n, gpointer user_data);
 typedef void (*set_new_value_func_t) (guint32 addr, double new_value, gpointer user_data);
 
 #if defined(BIN1)
-#define SCENARIO	1001
+#define SCENARIO	1004
 #include "bin1.c"
 #elif defined(BIN2)
 #define SCENARIO	2001
@@ -22,6 +22,9 @@ typedef void (*set_new_value_func_t) (guint32 addr, double new_value, gpointer u
 #elif defined(BIN3)
 #define SCENARIO	3002
 #include "bin3.c"
+#elif defined(BIN4)
+#define SCENARIO        4004
+#include "bin4.c"
 #else
 #error bla
 #endif
@@ -153,6 +156,41 @@ get_meet_greet_sat_pos (machine_state_t *state)
 
     return v;
 }
+#elif defined(BIN4)
+/*
+ * because the lack of visualization support of fuel stations it is handled as moon 2 ;)
+ */
+
+static void
+print_timestep (machine_state_t *state)
+{
+    int max_sat = 12; //how much satellites should be visualized
+
+    double sx = -state->output[2];
+    double sy = -state->output[3];
+    
+    double fuelx = state->output[4];
+    double fuely = state->output[5];
+
+    double moonx = state->output[0x64];
+    double moony = state->output[0x65];
+
+
+    
+    if (dump_file != NULL) {
+        fprintf(dump_file, "%d %f %f %f %f 0 %d 2 ", global_iter, state->output[0], state->output[1],
+                sx, sy, max_sat);
+	for (int i=0; i<max_sat; ++i){
+		double dx = state->output[3*i+7];
+                double dy = state->output[3*i+8];
+		fprintf(dump_file, "%f %f ", sx + dx, sy + dy);
+	}
+        fprintf(dump_file, "%f %f %f %f\n", sx + moonx, sy + moony,  sx + fuelx, sy + fuely);
+    }
+}   
+
+
+
 #else
 #error bla
 #endif
@@ -301,6 +339,47 @@ v_rotate (vector_t v, double angle)
     new.y = v.x*sin(angle)+v.y*cos(angle);
     return new;
 }
+
+
+/* MATH STUFF */
+
+#define	SIM_G	6.67428e-11
+#define SIM_M	6.0e+24
+#define SIM_R	6.357e+6
+
+#define SIM_mu	(SIM_G*SIM_M)
+
+static double
+m_period(double semi_major)
+{
+    return 2.0*G_PI * sqrt((semi_major * semi_major * semi_major) / SIM_mu);
+}
+
+static double
+m_focal_dist(double apoapsis, double periapsis)
+{
+    return apoapsis - periapsis;
+}
+
+static double
+m_major(double apoapsis, double periapsis)
+{
+    return apoapsis + periapsis;
+}
+
+static double
+m_semi_major(double apoapsis, double periapsis)
+{
+    return m_major(apoapsis, periapsis)/2.0;
+}
+
+static double
+m_eccentricity(double apoapsis, double periapsis)
+{
+    return m_focal_dist(apoapsis, periapsis) / m_major(apoapsis, periapsis);
+}
+
+
 
 static vector_t
 get_norm_speed (machine_state_t *state)
@@ -821,6 +900,9 @@ main (int argc, char *argv[])
     print_vec(our_perigee);
     g_print("\n\n");
 
+    g_print("(math) period : %f\n", m_period(v_abs(v_sub(our_apogee, our_perigee))/2));
+    g_print("(math) eccentricity : %f\n", m_eccentricity(v_abs(our_apogee), v_abs(our_perigee)));
+
     calc_ellipse_bertl(&global_state, &sat_apogee, &sat_perigee, &t_to_sat_apogee, &t_to_sat_perigee, get_meet_greet_sat_pos);
 
     g_print("s sat: t to apogee: %d  perigee: %d\n", t_to_sat_apogee, t_to_sat_perigee);
@@ -829,6 +911,9 @@ main (int argc, char *argv[])
     g_print("   perigee (%f) ", v_angle(sat_perigee) / G_PI * 180.0);
     print_vec(sat_perigee);
     g_print("\n\n");
+
+    g_print("(math) period : %f\n", m_period(v_abs(v_sub(sat_apogee, sat_perigee))/2));
+    g_print("(math) eccentricity : %f\n", m_eccentricity(v_abs(sat_apogee), v_abs(sat_perigee)));
 
     set_dump_orbit(v_abs(sat_perigee));
 
