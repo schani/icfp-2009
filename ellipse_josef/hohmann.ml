@@ -142,18 +142,29 @@ let hohmann sx1 sy1 sx2 sy2 zielradius =
 let to_absolute we other = other -. we;;
 
 
+
+
+let winkel_plus a b =
+  let sum = b +. a in
+  if (sum > (pi)) then
+    sum -. ( 2.0 *. pi)
+  else if (sum < (-. pi)) then
+    sum +. ( 2.0 *. pi)
+  else
+    sum
+	
+  
+let winkel_minus a b = 
+  winkel_plus a (-.b)
+
+
 (*
   pi / s
 *)
-
 let speed sx1 sy1 sx2 sy2 =
   let a = pos_winkel (winkel sx1 sy1) in
   let b = pos_winkel (winkel sx2 sy2) in
-  let diff = b -. a in
-  if (diff > ( 2.0 *. pi)) then
-    diff -. ( 2.0 *. pi)
-  else
-    diff   
+  winkel_minus a b
 ;;
 
 
@@ -172,6 +183,9 @@ let speed sx1 sy1 sx2 sy2 =
 (*       ((x,y), (hx,hy)) -> distance x y hx hy;; *)
 
 
+let point_to_string (x,y) = 
+  Printf.sprintf "%f %f" x y
+
 let winkel_if_shot wex1 wey1 wex2 wey2 oex1 oey1 oex2 oey2 =
   let zielr = radius (to_absolute wex1 oex1) (to_absolute wey1 oey1) in
   let zielspeed = speed 
@@ -182,9 +196,11 @@ let winkel_if_shot wex1 wey1 wex2 wey2 oex1 oey1 oex2 oey2 =
   let arrival_date = zeitbedarf  (to_our wex2) (to_our wey2) zielr in
   let arrival_point = zweiterpunkt (to_our wex2) (to_our wey2) zielr in
   let his_current_alpha = winkel  (to_absolute  wex2 oex2 ) (to_absolute wey2 oey2) in
-  let our_future_alpha = match arrival_point with
-      (x,y) -> winkel x y in 
-  (his_current_alpha +. (arrival_date *.zielspeed)) -. our_future_alpha;;
+  let our_future_alpha = (let (x,y) = arrival_point in winkel x y) in 
+  let res = winkel_minus (winkel_plus his_current_alpha (arrival_date *.zielspeed)) our_future_alpha in
+  (* Printf.printf "winkel_if_shot %f %f %f %f %s\n"  
+    res our_future_alpha his_current_alpha (winkel_plus his_current_alpha (arrival_date *.zielspeed)) (point_to_string  arrival_point);*)
+  res
 
 
 let time_to_start wex1 wey1 wex2 wey2 oex1 oey1 oex2 oey2 =
@@ -202,11 +218,11 @@ let time_to_start wex1 wey1 wex2 wey2 oex1 oey1 oex2 oey2 =
     (to_our wey1) 
     (to_our wex2) 
     (to_our wey2) in
-  abs (int_of_float (winkel_to_wait /. (ourspeed -. zielspeed)));;
+  abs (int_of_float (winkel_to_wait /. (winkel_minus ourspeed zielspeed)));;
 
 
  
-
+(* 
 time_to_start
   (-6556995.342903) (7814.932739)
   (-6556981.371618) (15629.854376)
@@ -250,6 +266,7 @@ speed
      to_absolute (-6456995.19753615) (1900001.93548247);;
      to_absolute (-15750.41915192) (-1905.75318447);;
      to_absolute (-6456980.79015176) (1900007.74192468);;
+*)
 
 (* to_absolute (-6556995.342903) (1800001.790116)  ;; *)
 (*  to_absolute (7814.932739) (892.59737999)  ;; *)
