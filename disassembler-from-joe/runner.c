@@ -20,7 +20,7 @@ typedef void (*set_new_value_func_t) (guint32 addr, double new_value, gpointer u
 #define SCENARIO	2001
 #include "bin2.c"
 #elif defined(BIN3)
-#define SCENARIO	3003
+#define SCENARIO	3002
 #include "bin3.c"
 #else
 #error bla
@@ -160,6 +160,15 @@ get_meet_greet_sat_pos (machine_state_t *state)
 static void
 global_timestep (void)
 {
+    /*
+    if (global_state.output[0] != 0.0) {
+	write_count(0, global_trace);
+	if (global_trace != NULL)
+	    fclose(global_trace);
+	g_print("score is %f\n", global_state.output[0]);
+	exit(0);
+    }
+    */
     write_timestep(global_trace, &global_old_inputs, &global_state.inputs);
     global_old_inputs = global_state.inputs;
     timestep(&global_state);
@@ -192,6 +201,13 @@ v_make (double x, double y)
 {
     vector_t v = { x, y };
     return v;
+}
+
+static vector_t
+v_add (vector_t a, vector_t b)
+{
+    vector_t c = { a.x + b.x, a.y + b.y };
+    return c;
 }
 
 static vector_t
@@ -790,6 +806,7 @@ main (int argc, char *argv[])
     g_assert_not_reached();
 #elif defined(BIN3)
 
+#if 0
     vector_t our_apogee, our_perigee;
     vector_t sat_apogee, sat_perigee;
     int t_to_our_apogee, t_to_our_perigee;
@@ -839,6 +856,52 @@ main (int argc, char *argv[])
     inject_circular_to_elliptical(&global_state, v_abs(sat_apogee), 1.0);
 
     clear_dump_orbit();
+#else
+
+    /*
+    set_thrust(&global_state, v_make(-2000.0, 0.0));
+    do_n_timesteps(&global_state, 1);
+    */
+
+    for (int i = 0; i < 10000; ++i) {
+	vector_t our_pos = get_pos(&global_state);
+	vector_t sat_pos = get_meet_greet_sat_pos(&global_state);
+	vector_t our_speed = get_speed(&global_state);
+	vector_t sat_speed = get_speed_generic(&global_state, get_meet_greet_sat_pos);
+	vector_t pos_diff = v_sub(sat_pos, our_pos);
+
+	if (v_abs(pos_diff) > 1.0) {
+	    vector_t speed_diff = v_sub(sat_speed, our_speed);
+	    vector_t scaled_v = v_add(speed_diff, v_mul_scal(v_norm(v_sub(sat_pos, our_pos)),
+							     MIN(v_abs(pos_diff), global_state.output[1]) / 50.0));
+
+	    /*
+	      vector_t direct_v = v_add(v_add(v_mul_scal(our_speed, -1.0),
+	      v_sub(sat_pos, our_pos)),
+	      sat_speed);
+	      vector_t scaled_v = v_mul_scal(v_norm(direct_v), global_state.output[1] / 1000.0);
+	    */
+
+	    g_print("distance %f   fuel %f   our speed (%f) ",
+		    v_abs(pos_diff), global_state.output[1], v_abs(our_speed));
+	    print_vec(our_speed);
+	    g_print("   sat speed (%f) ", v_abs(sat_speed));
+	    print_vec(sat_speed);
+	    g_print("   speed (%f) ", v_abs(scaled_v));
+	    print_vec(scaled_v);
+	    g_print("\n");
+
+	    set_thrust(&global_state, scaled_v);
+
+	    do_n_timesteps(&global_state, 50);
+	    /*
+	} else {
+	    do_n_timesteps(&global_state, 1);
+	    */
+	}
+    }
+
+#endif
 #elif defined(BIN4)
     /* nix */
 #else
