@@ -412,7 +412,7 @@ let make_orbit_window () =
       in let pixmap = GDraw.pixmap ~width:da_width ~height:da_height ()
       in
 	ignore (w#connect#destroy GMain.quit);
-	pixmap#set_foreground (`NAME "black");
+	pixmap#set_foreground (`RGB (20000, 20000, 20000));
 	pixmap#rectangle ~x:0 ~y:0 ~width:da_width ~height:da_height
 	  ~filled:true ();
 	let surface = (surface_from_gdk_pixmap pixmap#pixmap)

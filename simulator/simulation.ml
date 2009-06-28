@@ -69,4 +69,3 @@ let run_simulation osf_filename =
       Printf.printf "muhkuh scored: %f in move %d\n" score m.timestep;
       score;;
     
-run_simulation "3002.osf"

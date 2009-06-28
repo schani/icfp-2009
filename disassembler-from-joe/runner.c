@@ -489,6 +489,27 @@ m_eccentricity(double apoapsis, double periapsis)
 }
 
 
+/* solve T3+T4 numerically */
+
+static double
+m_solve_t3t4(double a, double b, double T, double precision)
+{
+    double interval[2] = { 0, 1e+6 };
+    double val, h = -1;
+    
+    do {
+	h = (interval[0] + interval[1])/2.0;
+	val = m_period((a+h)/2.0) + m_period((b+h)/2.0);
+	
+	if (val < T) {
+	    interval[0] = h;
+	} else {
+	    interval[1] = h;
+	}
+    } while (fabs(T - val) > precision);
+    return h;
+}
+
 
 static vector_t
 get_norm_speed (machine_state_t *state)
