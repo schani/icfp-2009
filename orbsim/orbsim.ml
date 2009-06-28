@@ -161,9 +161,9 @@ let paint_circle surface x y r =
 
 let paint_diamond surface x y r =
   Cairo.move_to surface (x -. r) y;
-  Cairo.line_to surface x (x -. r);
+  Cairo.line_to surface x (y -. r);
   Cairo.line_to surface (x +. r) y;
-  Cairo.line_to surface x (x +. r);
+  Cairo.line_to surface x (y +. r);
   Cairo.line_to surface (x -. r) y;
   Cairo.stroke surface
 
@@ -194,7 +194,7 @@ let show_sats ?(color=rgb_red) surface spasc sats =
 
 let show_fuelstation ?(r=3.5) ?(color=rgb_orange) surface spasc x y =
   set_color surface rgb_black;
-  paint_circle surface (ccx spasc x) (ccy spasc y) r
+  paint_diamond surface (ccx spasc x) (ccy spasc y) r
 
 let show_fuelstations ?(r=3.5) ?(color=rgb_orange) surface spasc fusts =
   List.iter (fun (x, y) -> show_fuelstation ~r ~color surface spasc x y) fusts
