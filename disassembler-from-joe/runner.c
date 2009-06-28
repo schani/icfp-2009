@@ -31,6 +31,9 @@ typedef void (*set_new_value_func_t) (guint32 addr, double new_value, gpointer u
 
 typedef vector_t (*get_pos_func_t) (machine_state_t *state);
 
+typedef double (*fuel_divisor_func_t) (machine_state_t *state, gpointer user_data);
+typedef int (*skip_size_func_t) (machine_state_t *state, gpointer user_data);
+
 FILE *dump_file = NULL;
 FILE *global_trace = NULL;
 int global_iter;
@@ -852,7 +855,9 @@ is_winning_state (machine_state_t *state)
 }
 
 static double
-do_follower (machine_state_t *state, get_pos_func_t get_pos_func, double fuel_divisor, int num_skip_timesteps,
+do_follower (machine_state_t *state, get_pos_func_t get_pos_func,
+	     fuel_divisor_func_t fuel_divisor_func, gpointer fuel_divisor_data,
+	     skip_size_func_t skip_size_func, gpointer skip_size_data,
 	     gboolean print)
 {
     while (state->output[0] == 0.0) {
@@ -867,6 +872,8 @@ do_follower (machine_state_t *state, get_pos_func_t get_pos_func, double fuel_di
 
 	if (v_abs(pos_diff) > 1.0) {
 	    vector_t speed_diff = v_sub(sat_speed, our_speed);
+	    int skip_size = skip_size_func(state, skip_size_data);
+	    double fuel_divisor = fuel_divisor_func(state, fuel_divisor_data);
 	    vector_t scaled_v = v_add(speed_diff, v_mul_scal(v_norm(v_sub(sat_pos, our_pos)),
 							     MIN(v_abs(pos_diff),
 								 state->output[1]) / fuel_divisor));
@@ -884,7 +891,7 @@ do_follower (machine_state_t *state, get_pos_func_t get_pos_func, double fuel_di
 
 	    set_thrust(state, scaled_v);
 
-	    do_n_timesteps(state, num_skip_timesteps);
+	    do_n_timesteps(state, skip_size);
 	} else {
 	    do_n_timesteps(state, 1);
 	}
@@ -894,6 +901,18 @@ do_follower (machine_state_t *state, get_pos_func_t get_pos_func, double fuel_di
 	do_n_timesteps(state, 1);
 
     return state->output[0];
+}
+
+static double
+constant_fuel_divisor_func (machine_state_t *state, gpointer user_data)
+{
+    return *(double*)user_data;
+}
+
+static int
+constant_skip_size_func (machine_state_t *state, gpointer user_data)
+{
+    return *(int*)user_data;
 }
 #endif
 
@@ -1030,7 +1049,7 @@ main (int argc, char *argv[])
     for (i = 0; divisors[i] > 0; ++i) {
 	double divisor = divisors[i];
 
-	g_print("%f", divisor);
+	//g_print("%f", divisor);
 
 	for (j = 0; skips[j] != 0; ++j) {
 	    int skip = skips[j];
@@ -1038,7 +1057,10 @@ main (int argc, char *argv[])
 	    machine_state_t copy = global_state;
 
 	    g_print("trying follower with divisor %f skip %d\n", divisor, skip);
-	    score = do_follower(&copy, get_meet_greet_sat_pos, divisor, skip, FALSE);
+	    score = do_follower(&copy, get_meet_greet_sat_pos,
+				constant_fuel_divisor_func, &divisor,
+				constant_skip_size_func, &skip,
+				FALSE);
 	    //g_print(";%f", score);
 	    g_print("score is %f\n", score);
 
@@ -1053,7 +1075,10 @@ main (int argc, char *argv[])
     }
 
     if (best_score > 0) {
-	do_follower(&global_state, get_meet_greet_sat_pos, best_divisor, best_skip, TRUE);
+	do_follower(&global_state, get_meet_greet_sat_pos,
+		    constant_fuel_divisor_func, &best_divisor,
+		    constant_skip_size_func, &best_skip,
+		    TRUE);
 	g_print("best score %f with divisor %f and skip %d\n", best_score, best_divisor, best_skip);
     }
 
