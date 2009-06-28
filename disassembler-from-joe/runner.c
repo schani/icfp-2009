@@ -886,9 +886,9 @@ main (int argc, char *argv[])
     }
     */
 #endif
-#elif defined(BIN2)
-    g_assert_not_reached();
-#elif defined(BIN3)
+    //#elif defined(BIN2)
+    //    g_assert_not_reached();
+#elif defined(BIN2) || defined(BIN3)
 
 #if 0
     vector_t our_apogee, our_perigee;
