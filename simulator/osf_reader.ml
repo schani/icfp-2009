@@ -60,7 +60,7 @@ let read_frame ic =
 let read_osf_file filename =
   let ic = open_osf filename in
   let frames = ref [] in
-(*  Printf.printf "Read file %s\n" filename; *)
+  Printf.printf "Read file %s\n" filename; 
     let scenario_id = read_header ic in
   try
     while true do
