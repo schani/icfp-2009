@@ -3,14 +3,14 @@
 DISTNAME = sim 
 BINFILES = $(DISTNAME)
 SBINFILES =
-LIBFILES = vm
-LIBCOMPS-vm = simulation basic_reader basic_writer instructions vm solve_hohman solve_meetandgreet solve_bielyptic
+LIBFILES = vm 
+LIBCOMPS-vm = basic_reader osf_reader simulation basic_writer instructions vm solve_hohman solve_meetandgreet solve_bielyptic
 DOCFILES = COPYING LICENSE CHANGELOG VERSION 
 OTHERFILES = $(DISTNAME).spec
 SRCFILES = $(shell echo *.ml *.mli *.mll *.mly) Makefile
 DISTFILES = $(DOCFILES) $(OTHERFILES) $(SRCFILES)
 DISTVERSIONFILES =
-MODULES = simulation basic_reader basic_writer instructions vm solve_hohman solve_meetandgreet solve_bielyptic
+MODULES = basic_reader  osf_reader simulation basic_writer instructions vm solve_hohman solve_meetandgreet solve_bielyptic
 LIBRARIES = ../ellipse_josef/ellipsen
 BINARIES = $(BINFILES) $(SBINFILES)
 DISTVERSION = $(shell cat VERSION)
