@@ -28,7 +28,7 @@ let tpos1 = ref (0.,0.);;
 let strategy = ref {
   first_thrust = (0.,0.); 
   second_thrust = (0.,0.); 
-  second_thrust_time = -100;
+  second_thrust_time = 10000000;
   timetotransfer = 100000;
   check = -100;
   transfer_active = false;
@@ -38,10 +38,10 @@ let calc_transfer_strat m =
   (* Printf.printf "starting timecalc with %f %f %f %f"
     (x !pos0) (y !pos0) 
     (x !pos1) (y !pos1); 
-  Printf.printf " %f %f %f %f\n"
-    (x !tpos0) (y !tpos0) 
+     Printf.printf " %f %f %f %f\n"
+     (x !tpos0) (y !tpos0) 
      (x !tpos1) (y !tpos1);  *)
-  let timetotransfer = (int_of_float
+  let timetotransfer = (int_of_float 
     (* Hohmann.time_to_start *)
     (Newtime.new_time_to_start 
       (x !pos0) (y !pos0) 
@@ -83,6 +83,7 @@ let square x = x*.x
 let vecdiff (x1,y1) (x2,y2) = 
   (x2-x1,y1,y2)
 
+let mindist = ref 10000000.
 
 let length (x,y) = 
   let xx = square x in
@@ -113,48 +114,38 @@ let aktuator =
 	  pos1 := (posx,posy);
 	  tpos1 := (targetx,targety)
 	);
-      Printf.fprintf stderr "distance %d to dst: %f %f\n" m.timestep (length !tpos1) (length !pos1); 
+      let dist = (length !tpos1) in
+      (
+	if dist < !mindist then
+	  mindist := dist;
+	(* Printf.fprintf stderr "distance %d to dst: %f %f\n" m.timestep dist !mindist; *)
+      );
       ()
     end;
-
-    (* time score fuel  x y #o #sat #moon fo fo .. sx sy ... remifiziert *)
-    Printf.printf "%i %f %f %f %f %i %i %i %f %f %s\n"
-      m.timestep score fuel (-.posx) (-.posy) 0 1 0 
-      (Hohmann.to_absolute posx targetx) 
-      (Hohmann.to_absolute posy targety) 
-      "emptag";
     
     if (m.timestep < !strategy.timetotransfer) && (m.timestep >= 2)then (
       strategy := calc_transfer_strat m;
       Printf.printf "strategy %d do nothing until %d\n" m.timestep !strategy.timetotransfer;
-      let m = vm_write_actuator m DeltaX 0. in
-      let m = vm_write_actuator m DeltaY 0. in
-      m
+      vm_write_thrust m (0.,0.)
     ) else if (m.timestep >=2 ) && (not !strategy.transfer_active) then (
 	Printf.printf "comencing transfer \n"; 
 	strategy := run_hohmann targetorbit m;
 	strategy := {!strategy with transfer_active = true};
-	Printf.printf "hohman: %d %f %f\n" m.timestep (x !strategy.first_thrust) (y !strategy.first_thrust);
-	let m = vm_write_actuator m DeltaX (x !strategy.first_thrust)
-	in
-	let m = vm_write_actuator m DeltaY (y !strategy.first_thrust)
-	in
-	m
-      )
+	Printf.printf "hohman: %d %f %f\n" m.timestep (x
+	  !strategy.first_thrust) (y !strategy.first_thrust);
+	vm_write_thrust m !strategy.first_thrust
+    )
       else
 	match m.timestep with
 	  | step when step = !strategy.second_thrust_time ->
 	      Printf.printf "second thrust time reached\n"; 
-	      let m = vm_write_actuator m DeltaX (x !strategy.second_thrust)
-	      in
-	      let m = vm_write_actuator m DeltaY (y !strategy.second_thrust)
-	      in
-	      m
+	      vm_write_thrust m !strategy.second_thrust
+	  | step when step > !strategy.second_thrust_time + 2 ->
+	      Kurden_approximator.follow m
 	  | _ ->
-	      let m = vm_write_actuator m DeltaX 0. in
-	      let m = vm_write_actuator m DeltaY 0. in
-	      m
-
+	      (* Printf.printf "ALERT, maybe should not be reached\n";*)
+	      vm_write_thrust m (0.,0.)
+		
 
 
 
