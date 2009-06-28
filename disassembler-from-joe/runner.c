@@ -48,6 +48,7 @@ FILE *global_trace = NULL;
 machine_state_t global_state;
 machine_inputs_t global_old_inputs;
 double dump_orbit = -1;
+vector_t debug_point = { 0.0, 0.0 };
 
 static void
 set_input (machine_state_t *state, guint32 addr, double value)
@@ -136,6 +137,12 @@ clear_dump_orbit (void)
     dump_orbit = -1;
 }
 
+static void
+set_debug_point (vector_t p)
+{
+    debug_point = p;
+}
+
 /* Format of dump file:
  *
  * <time> <score> <fuel> <our-x> <our-y>
@@ -171,12 +178,15 @@ print_timestep (machine_state_t *state)
     double dy = state->output[5];
 
     if (dump_file != NULL) {
-	fprintf(dump_file, "%d %f %f %f %f %d 1 0 0 0 ", state->num_timesteps_executed,
+	fprintf(dump_file, "%d %f %f %f %f %d 1 0 0 1 ", state->num_timesteps_executed,
 		state->output[0], state->output[1],
 		sx, sy, dump_orbit <= 0.0 ? 0 : 1);
 	if (dump_orbit > 0.0)
 	    fprintf(dump_file, "%f ", dump_orbit);
-	fprintf(dump_file, "%f %f %f\n", sx + dx, sy + dy, sqrt(sx * sx + sy * sy));
+	fprintf(dump_file, "%f %f %f %f %f\n",
+		sx + dx, sy + dy,
+		debug_point.x, debug_point.y,
+		sqrt(sx * sx + sy * sy));
     }
 }
 
@@ -200,7 +210,7 @@ get_meet_greet_sat_pos (machine_state_t *state)
 static void
 print_timestep (machine_state_t *state)
 {
-    int max_sat = 12; //how much satellites should be visualized
+    int max_sat = 11; //how much satellites should be visualized
 
     double sx = -state->output[2];
     double sy = -state->output[3];
@@ -214,19 +224,81 @@ print_timestep (machine_state_t *state)
 
     
     if (dump_file != NULL) {
-        fprintf(dump_file, "%d %f %f %f %f 0 %d 1 1 0 ", state->num_timesteps_executed, state->output[0], state->output[1],
+        fprintf(dump_file, "%d %f %f %f %f 0 %d 1 1 1 ", state->num_timesteps_executed, state->output[0], state->output[1],
                 sx, sy, max_sat);
 	for (int i=0; i<max_sat; ++i){
 		double dx = state->output[3*i+7];
                 double dy = state->output[3*i+8];
 		fprintf(dump_file, "%f %f ", sx + dx, sy + dy);
 	}
-        fprintf(dump_file, "%f %f %f %f\n", sx + moonx, sy + moony,  sx + fuelx, sy + fuely);
+        fprintf(dump_file, "%f %f %f %f %f %f\n",
+		sx + moonx, sy + moony,
+		sx + fuelx, sy + fuely,
+		debug_point.x, debug_point.y);
     }
 }   
 
+static vector_t
+get_fuel_station_pos (machine_state_t *state)
+{
+    vector_t pos = get_pos(state);
 
+    double dx = state->output[4];
+    double dy = state->output[5];
 
+    vector_t v = { pos.x + dx, pos.y + dy };
+
+    return v;
+}
+
+static vector_t
+get_sat_n_pos (machine_state_t *state, int n)
+{
+    vector_t pos = get_pos(state);
+
+    g_assert(n >= 0 && n < 11);
+
+    double dx = state->output[3 * n + 7];
+    double dy = state->output[3 * n + 8];
+
+    vector_t v = { pos.x + dx, pos.y + dy };
+
+    return v;
+}
+
+static gboolean
+get_sat_n_collected (machine_state_t *state, int n)
+{
+    g_assert(n >= 0 && n < 11);
+
+    double dx = state->output[3 * n + 9];
+
+    return dx != 0.0;
+}
+
+static vector_t get_sat_0_pos (machine_state_t *state) { return get_sat_n_pos(state, 0); }
+static vector_t get_sat_1_pos (machine_state_t *state) { return get_sat_n_pos(state, 1); }
+static vector_t get_sat_2_pos (machine_state_t *state) { return get_sat_n_pos(state, 2); }
+static vector_t get_sat_3_pos (machine_state_t *state) { return get_sat_n_pos(state, 3); }
+static vector_t get_sat_4_pos (machine_state_t *state) { return get_sat_n_pos(state, 4); }
+static vector_t get_sat_5_pos (machine_state_t *state) { return get_sat_n_pos(state, 5); }
+static vector_t get_sat_6_pos (machine_state_t *state) { return get_sat_n_pos(state, 6); }
+static vector_t get_sat_7_pos (machine_state_t *state) { return get_sat_n_pos(state, 7); }
+static vector_t get_sat_8_pos (machine_state_t *state) { return get_sat_n_pos(state, 8); }
+static vector_t get_sat_9_pos (machine_state_t *state) { return get_sat_n_pos(state, 9); }
+static vector_t get_sat_10_pos (machine_state_t *state) { return get_sat_n_pos(state, 10); }
+
+static get_pos_func_t get_sat_pos_funcs[] = { get_sat_0_pos, get_sat_1_pos, get_sat_2_pos,
+					      get_sat_3_pos, get_sat_4_pos, get_sat_5_pos,
+					      get_sat_6_pos, get_sat_7_pos, get_sat_8_pos,
+					      get_sat_9_pos, get_sat_10_pos };
+
+static get_pos_func_t
+get_get_sat_pos_func (int n)
+{
+    g_assert(n >= 0 && n < 11);
+    return get_sat_pos_funcs[n];
+}
 #else
 #error bla
 #endif
@@ -888,7 +960,6 @@ is_meet_greet_terminated (machine_state_t *state, get_pos_func_t get_pos_func, g
 {
     vector_t our_pos = get_pos(state);
     vector_t sat_pos = get_pos_func(state);
-    vector_t pos_diff = v_sub(sat_pos, our_pos);
 
     if (state->num_timesteps_executed >= MAX_TIMESTEPS)
 	return TRUE;
@@ -896,6 +967,21 @@ is_meet_greet_terminated (machine_state_t *state, get_pos_func_t get_pos_func, g
 	return TRUE;
     return is_winning_state(state, get_pos_func);
 }
+
+#ifdef BIN4
+static gboolean
+is_sat_hit_terminated (machine_state_t *state, get_pos_func_t get_pos_func, gpointer user_data)
+{
+    int sat_num = *(int*)user_data;
+
+    if (state->num_timesteps_executed >= MAX_TIMESTEPS)
+	return TRUE;
+    if (state->output[0] != 0.0)
+	return TRUE;
+
+    return get_sat_n_collected(state, sat_num);
+}
+#endif
 
 static int
 do_follower (machine_state_t *state, get_pos_func_t get_pos_func,
@@ -1268,9 +1354,85 @@ main (int argc, char *argv[])
 
 #endif
 #elif defined(BIN4)
-    
 
-    /* nix */
+#if 0
+    for (;;) {
+	int best_sat = -1;
+	int best_sat_steps = MAX_TIMESTEPS;
+	int steps;
+	double divisor = 10.0;
+	int step_size = 7;
+
+	for (i = 0; i < 11; ++i) {
+	    if (!get_sat_n_collected(&global_state, i)) {
+		machine_state_t copy = global_state;
+
+		g_print("trying to hit sat %d\n", i);
+
+		steps = do_follower(&copy, get_get_sat_pos_func(i),
+				    constant_fuel_divisor_func, &divisor,
+				    constant_skip_size_func, &step_size,
+				    is_sat_hit_terminated, &i,
+				    FALSE);
+
+		if (get_sat_n_collected(&copy, i)) {
+		    g_print("hit in step %d\n", steps);
+
+		    if (steps < best_sat_steps) {
+			best_sat = i;
+			best_sat_steps = steps;
+		    }
+		} else {
+		    g_print("terminated in step %d\n", steps);
+		}
+	    }
+	}
+
+	if (best_sat == -1) {
+	    gboolean need_sats = FALSE;
+	    g_print("done - sats not hit:");
+	    for (i = 0; i < 11; ++i) {
+		if (!get_sat_n_collected(&global_state, i)) {
+		    g_print(" %d", i);
+		    need_sats = TRUE;
+		}
+	    }
+	    g_print("\n");
+	    if (need_sats) {
+		g_print("still sats to hit - will wait for 10 steps\n");
+		do_n_timesteps(&global_state, 10);
+	    } else {
+		break;
+	    }
+	} else {
+	    g_print("hitting sat %d at step %d\n", best_sat, best_sat_steps);
+
+	    steps = do_follower(&global_state, get_get_sat_pos_func(best_sat),
+				constant_fuel_divisor_func, &divisor,
+				constant_skip_size_func, &step_size,
+				is_sat_hit_terminated, &best_sat,
+				FALSE);
+	    g_assert(steps == best_sat_steps);
+	    g_assert(get_sat_n_collected(&global_state, best_sat));
+	}
+    }
+#else
+
+    double divisor = 10.0;
+    int step_size = 7;
+    int sat = 0;
+
+    set_debug_point(get_sat_n_pos(&global_state, sat));
+    do_follower(&global_state, get_get_sat_pos_func(sat),
+		constant_fuel_divisor_func, &divisor,
+		constant_skip_size_func, &step_size,
+		is_sat_hit_terminated, &sat,
+		TRUE);
+
+    do_n_timesteps(&global_state, 10);
+#endif
+
+
 #else
 #error bla
 #endif
