@@ -209,8 +209,7 @@ print_timestep (machine_state_t *state)
 
     
     if (dump_file != NULL) {
-        fprintf(dump_file, "%d %f %f %f %f 0 %d 2 ", state->num_timesteps_executed,
-		state->output[0], state->output[1],
+        fprintf(dump_file, "%d %f %f %f %f 0 %d 1 1 0 ", state->num_timesteps_executed, state->output[0], state->output[1],
                 sx, sy, max_sat);
 	for (int i=0; i<max_sat; ++i){
 		double dx = state->output[3*i+7];
