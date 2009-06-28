@@ -6,6 +6,8 @@
    + trace
    + ruler
    + fadenkreuz wenn erde zu klein
+   + sat nicht rot
+   + andere sats groesser 1-2 pixel
 *)
 
 open GMain
@@ -16,7 +18,7 @@ let diewoed = Cairo_png.image_surface_create_from_file "/tmp/erde.png"
 
 let earth_r = 6357000.0
 let moon_r =  173600.0 (* mycrometer genau! *)
-let initial_zoom = 10.0
+let initial_zoom = 100.0
 let initial_speed = 10
 let pi = atan 1. *. 4.0;;
 let two_pi = pi *. 2.0;;
@@ -35,6 +37,7 @@ let our_y = ref 0.0
 let our_orbits = ref []
 let our_sats = ref []
 let our_moons = ref []
+let our_massband = ref None
 
 let our_history :(float * float) list ref = ref []
 let our_sats_histories :(float * float) list array =
@@ -115,6 +118,9 @@ let ccy spasc coord =
 let vc spasc value =
   value *. spasc.screen_minlen /. spasc.spaceview_minlen
 
+let vc' spasc value' =
+  value' *. spasc.spaceview_minlen /. spasc.screen_minlen
+
 let surface_from_gdk_pixmap gdkpixmap =
   Cairo_lablgtk.create gdkpixmap
 
@@ -142,7 +148,7 @@ let paint_line surface x1 y1 x2 y2 =
   Cairo.line_to surface x2 y2;
   Cairo.stroke surface
 
-let paint_filled_circle surface spasc x y r =
+let paint_filled_circle surface x y r =
   Cairo.save surface;
   Cairo.new_path surface;
   Cairo.arc surface x  y r 0. two_pi;
@@ -150,7 +156,7 @@ let paint_filled_circle surface spasc x y r =
   Cairo.restore surface;
   Cairo.stroke surface
 
-let paint_circle surface spasc x y r =
+let paint_circle surface x y r =
   Cairo.arc surface x y r 0. two_pi;
   Cairo.stroke surface
 
@@ -163,27 +169,58 @@ let show_traces ?(color=rgb_cyan) surface spasc traces =
 
 let show_orbit ?(color=rgb_yellow) surface spasc r =
   set_color surface color;
-  paint_circle surface spasc (ccx spasc 0.0) (ccy spasc 0.0) (vc spasc r)
+  paint_circle surface (ccx spasc 0.0) (ccy spasc 0.0) (vc spasc r)
 
 let show_orbits ?(color=rgb_yellow) surface spasc rs =
   List.iter (fun r -> show_orbit ~color surface spasc r) rs
 
-let show_sat ?(color=rgb_red) surface spasc x y =
+let show_sat ?(r=3.0) ?(color=rgb_white) surface spasc x y =
   set_color surface color;
-  paint_circle surface spasc (ccx spasc x) (ccy spasc y) 3.0
+  paint_circle surface (ccx spasc x) (ccy spasc y) r
 
 let show_sats ?(color=rgb_red) surface spasc sats =
-  List.iter (fun (x, y) -> show_sat ~color surface spasc x y) sats
+  List.iter (fun (x, y) -> show_sat  ~r:4.5 ~color surface spasc x y) sats
 
 let show_earth surface spasc =
   set_color surface rgb_green;
-  paint_filled_circle surface spasc (ccx spasc 0.0) (ccy spasc 0.0)
+  paint_filled_circle surface (ccx spasc 0.0) (ccy spasc 0.0)
     (vc spasc earth_r)
 
 let show_moon surface spasc (x, y) =
   set_color surface rgb_yellow;
-  paint_filled_circle surface spasc (ccx spasc x) (ccy spasc y)
+  paint_filled_circle surface (ccx spasc x) (ccy spasc y)
     (vc spasc moon_r)
+
+let show_massband surface spasc = function
+    None -> ()
+  | Some (x1, y1, x2, y2) ->
+      set_color surface rgb_red;
+      paint_line surface x1 y1 x2 y2;
+      let f = sqrt ((x1-.x2)*.(x1-.x2) +. (y1-.y2)*.(y1-.y2))
+      in let msg = Printf.sprintf "%fm" f
+      in let extent = Cairo.text_extents surface msg
+      in let msg_len = extent.Cairo.text_width
+      in let text_adder = (f -. msg_len) /. 2.0
+      in let dist = vc' spasc f
+      in let ang1 = (atan2 (y2 -. y1) (x2 -. x1));
+      in let xtext, ytext, xadder, yadder =
+	  if abs_float ang1 < (pi /. 2.0) then (* right side *)
+	    (x1 +. (cos (ang1 +. 0.)) *. text_adder,
+	     y1 +. (sin (ang1 +. 0.)) *. text_adder,
+	     (sin (ang1 +. pi)) *. (0.0 -. 10.0),
+	     (cos (ang1 +. 0.)) *. (0.0 -. 10.0))
+	  else (* left side *)
+	    (x2 -. (cos (ang1 +. 0.)) *. text_adder, 
+	     y2 -. (sin (ang1 +. 0.)) *. text_adder,
+	     (sin (ang1 +. pi)) *. (0.0 +. 10.0),
+	     (cos (ang1 +. 0.)) *. (0.0 +. 10.0))
+      in let ang = if ang1 < (0.0 -. pi /. 2.0) or ang1 > (pi /. 2.0)
+	then ang1 +. pi else ang1
+      in
+	Cairo.move_to surface (xadder +. xtext) (yadder +. ytext);
+	Cairo.rotate surface ~angle:ang;
+	Cairo.show_text surface msg;
+	Cairo.stroke surface
 
 let create_space surface spasc =
   show_earth surface spasc
@@ -196,7 +233,7 @@ let status_line = ref (GMisc.label ~text:"Statusline" ~justify:`FILL ())
 let update_status_line = (!status_line)#set_text
 
 let make_orbit_window () =
-  let spasc = { zoom = earth_r *. initial_zoom;
+  let spasc = { zoom = earth_r /. 20.0 *. initial_zoom;
 		speed = initial_speed;
 		screen_height = 500;
 		screen_width = 500;
@@ -225,7 +262,7 @@ let make_orbit_window () =
       ~lower:(0.0 -. initial_zoom *. earth_r) ~upper:(initial_zoom *. earth_r)
       ~step_incr:1.0 ~page_incr:50.0 ~page_size:1.0 ()
   in let zoomer = GData.adjustment ~value:initial_zoom ~lower:1.0
-      ~upper:100000.0 ~step_incr:1.0 ~page_incr:50.0 ~page_size:1.0 ()
+      ~upper:100000.0 ~step_incr:1.0 ~page_incr:200.0 ~page_size:1.0 ()
   in let speeder = GData.adjustment ~value:(float_of_int initial_speed)
       ~lower:1.0 ~upper:10000.0 ~step_incr:1.0 ~page_incr:50.0 ~page_size:1.0 ()
   in let playing = ref false
@@ -234,16 +271,16 @@ let make_orbit_window () =
     scrollwin#set_vadjustment scrolly;
     ignore (zoomer#connect#value_changed
 	      (fun () ->
-		 spasc.zoom <- zoomer#value *. earth_r; refresh_da da));
+		 spasc.zoom <- zoomer#value *. earth_r /. 20.0; refresh_da da));
     ignore (speeder#connect#value_changed
 	      (fun () ->
 		 spasc.speed <- int_of_float speeder#value));
-    ignore (GEdit.spin_button ~adjustment:zoomer ~rate:0. ~digits:5 ~width:75 
+    ignore (GEdit.spin_button ~adjustment:zoomer ~rate:0. ~digits:5 ~width:100 
 	      ~packing:hbox1#pack ());
     ignore (GMisc.label ~text:"Speed:" ~packing:(hbox1#pack ~expand:false) ());
-    ignore (GEdit.spin_button ~adjustment:speeder ~rate:0. ~digits:3 ~width:45 
+    ignore (GEdit.spin_button ~adjustment:speeder ~rate:0. ~digits:3 ~width:100 
 	      ~packing:hbox1#pack ());
-    hbox1#pack !status_line#coerce;
+    vbox#pack !status_line#coerce;
     da#misc#realize ();
     let q = if Array.length Sys.argv > 1 then
       Vmbridge.setup_file Sys.argv.(1)
@@ -270,6 +307,7 @@ let make_orbit_window () =
 	  show_sat surface spasc !our_x !our_y;
 	  show_trace surface ~color:rgb_white spasc !our_history;
 	  show_traces surface spasc our_sats_histories;
+	  show_massband surface spasc !our_massband;
 	  (*
 	  Cairo.set_source_surface surface diewoed 10.0 100.0;
 	  Cairo.paint surface;
@@ -335,7 +373,9 @@ let make_orbit_window () =
 	  !remove_timeout ()
 	end
     in let left_pressed = ref false
+       and right_pressed = ref false
        and mouse_coords = ref (0.0, 0.0)
+       and massband_start = ref (0.0, 0.0)
     in let mbutton_callback ev =
 	match GdkEvent.get_type ev with
 	    `BUTTON_PRESS when GdkEvent.Button.button ev = 1 ->
@@ -344,38 +384,46 @@ let make_orbit_window () =
 		mouse_coords := mx, my;
 		left_pressed := true;
 		true
-	  | `BUTTON_PRESS ->
-	      Printf.fprintf stderr "MOUSE PRESS %i\n"
-		(GdkEvent.Button.button ev); flush stderr;
-	      false
+	  | `BUTTON_PRESS when GdkEvent.Button.button ev = 3 ->
+	      let mx, my = GdkEvent.Button.x ev, GdkEvent.Button.y ev
+	      in
+		massband_start := mx, my;
+		right_pressed := true;
+		true;
 	  | `BUTTON_RELEASE when GdkEvent.Button.button ev = 1 ->
 	      left_pressed := false;
 	      true
+	  | `BUTTON_RELEASE when GdkEvent.Button.button ev = 3 ->
+	      right_pressed := false;
+	      our_massband := None;
+	      refresh_da da;
+	      true
 	  | _ ->
-	      Printf.fprintf stderr "llllllllllll so a sau\n"; flush stderr;
 	      false
        and mmove_callback ev =
 	let mx = GdkEvent.Motion.x ev
 	and my = GdkEvent.Motion.y ev
 	in
-	  if !left_pressed then
+	  if !left_pressed then begin
 	    let oldx, oldy = !mouse_coords
 	    in
-	      if mx <> oldx or my <> oldy then
-		begin
-		  spasc.spaceview_x1 <-
-		    spasc.spaceview_x1 +. (oldx -. mx) *.
-		    (spasc.zoom /. (float_of_int spasc.screen_width));
-		  spasc.spaceview_y1 <-
+	      spasc.spaceview_x1 <-
+		spasc.spaceview_x1 +. (oldx -. mx) *.
+		(spasc.zoom /. (float_of_int spasc.screen_width));
+	      spasc.spaceview_y1 <-
 		    spasc.spaceview_y1 +. (oldy -. my) *.
-		    (spasc.zoom /. (float_of_int spasc.screen_height));
-		  mouse_coords := mx, my;
-		  spasc_refocus spasc;
-		  refresh_da da;
-		end;
-	      false
-	  else
-	    false
+		(spasc.zoom /. (float_of_int spasc.screen_height));
+	      mouse_coords := mx, my;
+	      spasc_refocus spasc;
+	      refresh_da da
+	  end;
+	  if !right_pressed then begin
+	    let sx, sy = !massband_start
+	    in
+	      our_massband := Some (sx, sy, mx, my);
+	      refresh_da da
+	  end;
+	  false
        and scroll_callback ev =
 	match GdkEvent.get_type ev with
 	  | `SCROLL ->(*
@@ -383,9 +431,9 @@ let make_orbit_window () =
 		(GdkEvent.Scroll.x ev) (GdkEvent.Scroll.y ev);
 	      flush stderr; *)
 	      if GdkEvent.Scroll.direction ev = `UP then
-		zoomer#set_value (zoomer#value +. 1.0);
+		zoomer#set_value (zoomer#value +. 20.0);
 	      if GdkEvent.Scroll.direction ev = `DOWN then
-		zoomer#set_value (zoomer#value -. 1.0);
+		zoomer#set_value (zoomer#value -. 20.0);
 	      true
 	  | _ -> false
     in
