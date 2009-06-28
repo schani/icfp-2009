@@ -17,6 +17,8 @@ let moon_r =  1738000.0 (* mycrometer genau! *)
 let initial_zoom = 200.0
 let initial_speed = 10
 let initial_fps = 25
+let initial_window_width = 800
+let initial_window_height = 800
 let pi = atan 1. *. 4.0
 let two_pi = pi *. 2.0
 let border = 1000.0
@@ -42,14 +44,21 @@ let our_rectzoomer = ref None
 let our_fuelstations = ref []
 let our_debugstations = ref []
 
+let our_history :(float * float) list ref = ref []
+let our_sats_histories :(float * float) list array =
+  [| []; []; []; []; []; []; []; []; []; []; []; []; |]
+
 let limit_x1 = ref (0.0 -. earth_r *. 2.0)
 let limit_y1 = ref (0.0 -. earth_r *. 2.0)
 let limit_x2 = ref (earth_r *. 2.0)
 let limit_y2 = ref (earth_r *. 2.0)
 
-let our_history :(float * float) list ref = ref []
-let our_sats_histories :(float * float) list array =
-  [| []; []; []; []; []; []; []; []; []; []; []; []; |]
+let show_sat_nr = ref true
+let do_goto = ref None
+
+type tracker = TR_None | TR_OurSat | TR_Sat of int
+
+let the_tracker = ref TR_None
 
 (* 0,0 is always in middle of screen (coords of earth) *)
 type space_screen = {
@@ -196,7 +205,7 @@ let show_orbit ?(color=rgb_yellow) surface spasc r =
 let show_orbits ?(color=rgb_yellow) surface spasc rs =
   List.iter (fun r -> show_orbit ~color surface spasc r) rs
 
-let show_sat ?i ?(r=3.0) ?(color=rgb_white) surface spasc x y =
+let show_sat ?(i=None) ?(r=3.0) ?(color=rgb_white) surface spasc x y =
   let x, y = (ccx spasc x), (ccy spasc y)
   in
     set_color surface color;
@@ -208,7 +217,9 @@ let show_sat ?i ?(r=3.0) ?(color=rgb_white) surface spasc x y =
 	  paint_text surface (x +. r +. 2.0) (y +. r +. 8.0) (string_of_int i)
 
 let show_sats ?(color=rgb_red) surface spasc sats =
-  Array.iteri (fun i (x, y) -> show_sat ~r:4.5 ~color ~i surface spasc x y) sats
+  Array.iteri (fun i (x, y) -> show_sat ~r:4.5 ~color
+		 ~i:(if !show_sat_nr then Some i else None)
+		 surface spasc x y) sats
 
 let show_fuelstation ?(r=3.5) ?(color=rgb_orange) surface spasc x y =
   set_color surface rgb_black;
@@ -316,14 +327,15 @@ let update_status_line = (!status_line)#set_text
 let make_orbit_window () =
   let spasc = { zoom = 1.0;
 		speed = initial_speed;
-		screen_height = 500.0;
-		screen_width = 500.0;
+		screen_height = 5.0;
+		screen_width = 5.0;
 		spaceview_x = 0.0;
 		spaceview_y = 0.0;
 		spaceview_width = 2.0;
 		spaceview_height = 2.0;
 	      }
-  in let w = GWindow.window ~height:500 ~width:500 ()
+  in let w = GWindow.window
+      ~height:initial_window_height ~width:initial_window_width ()
   in let vbox = GPack.vbox ~packing:w#add ~homogeneous:false ()
   in let table = GPack.table ~rows:4 ~columns:4 ~homogeneous:false
       ~packing:(vbox#pack ~expand:true) ()
@@ -387,18 +399,48 @@ let make_orbit_window () =
     ignore (speeder#connect#value_changed
 	      (fun () ->
 		 spasc.speed <- int_of_float speeder#value));
-    ignore (GEdit.spin_button ~adjustment:zoomer ~rate:0. ~digits:5 ~width:100
+    ignore (GEdit.spin_button ~adjustment:zoomer ~rate:0. ~digits:2 ~width:75
 	      ~packing:hbox1#pack ());
     ignore (GMisc.label ~text:"Speed:" ~packing:(hbox1#pack ~expand:false) ());
-    ignore (GEdit.spin_button ~adjustment:speeder ~rate:0. ~digits:3 ~width:100
+    ignore (GEdit.spin_button ~adjustment:speeder ~rate:0. ~digits:1 ~width:60
 	      ~packing:hbox1#pack ());
     ignore (GMisc.label ~text:"FPS:" ~packing:(hbox1#pack ~expand:false) ());
     ignore (GEdit.spin_button ~adjustment:framer ~rate:0. ~digits:1 ~width:50
 	      ~packing:hbox1#pack ());
     let resetview_button =
       GButton.button ~label:"Reset View" ~packing:hbox1#pack ()
+    in let deltraces_button =
+	GButton.button ~label:"Reset Traces" ~packing:hbox1#pack ()
+    in let _ = GMisc.label ~text:"Track:" ~packing:(hbox1#pack ~expand:false) ()
+    in let trackoptmenu =
+	GMenu.option_menu ~packing:(hbox1#pack ~expand:false) ()
+    in let trackmenu = GMenu.menu ~packing:trackoptmenu#set_menu ()
+    in let make_menu_item label callback =
+	let item = GMenu.menu_item ~label ~packing:trackmenu#append () in
+	  ignore (item#connect#activate ~callback)
+    in let sat_nr_toggler = GButton.check_button ~label:"Sat #" ~active:true
+	~packing:(hbox1#pack ~expand:false) ()
+    in let _ = GMisc.label ~text:"Goto:" ~packing:(hbox1#pack ~expand:false) ()
+    in let goto_box = GEdit.entry ~max_length:50
+	~packing:(hbox1#pack ~expand:false) ()
     in
+      make_menu_item "Noting" (fun _ -> the_tracker := TR_None);
+      make_menu_item "Our Sat" (fun _ -> the_tracker := TR_OurSat);
+      for i = 0 to 10 do
+	make_menu_item (sprintf "Sat %i" i) (fun _ -> the_tracker := TR_Sat i)
+      done;
+      ignore (sat_nr_toggler#connect#toggled ~callback:
+		(fun () -> show_sat_nr := sat_nr_toggler#active));
       hbox3#pack ~expand:false !status_line#coerce;
+      ignore (goto_box#connect#activate
+		~callback:(fun () ->
+			     try
+			       do_goto := Some (int_of_string goto_box#text)
+			     with
+				 _ ->
+				   fprintf stderr "illegal goto line\n";
+				   flush stderr;
+				   do_goto := None));
       ignore (GMisc.label ~text:"" ~packing:(hbox3#pack ~expand:true) ());
       da#misc#realize ();
       let mousepos = GMisc.label ~text:"" ~packing:(hbox2#pack ~expand:false) ()
@@ -482,7 +524,22 @@ let make_orbit_window () =
 	    our_moons := moons;
 	    our_fuelstations := fusts;
 	    our_debugstations := debugs;
-	    ignore (redraw_all ());
+	    begin
+	      match !the_tracker with
+		| TR_None -> ()
+		| TR_OurSat ->
+		    spasc.spaceview_x <- !our_x;
+		    spasc.spaceview_y <- !our_y;
+		    recalculate_spaceview spasc;
+		| TR_Sat i ->
+		    if i < Array.length !our_sats then begin
+		      spasc.spaceview_x <- fst !our_sats.(i);
+		      spasc.spaceview_y <- snd !our_sats.(i);
+		      recalculate_spaceview spasc;
+		    end else
+		      printf "tried to track non existant sat\n"; flush stdout;
+	    end;
+	    refresh_da da;
 	    install_timeout_handler ();
 	end;
 	 false
@@ -624,6 +681,12 @@ let make_orbit_window () =
 		   spasc.spaceview_y <- 0.0;
 		   zoomer#set_value initial_zoom;
 		   refresh_da da));
+      ignore (deltraces_button#connect#clicked ~callback:
+		(function () ->
+		   our_history := [];
+		   for i = 0 to 11 do
+		     our_sats_histories.(i) <- [];
+		 done;));
       let da_width, da_height = Gdk.Drawable.get_size (da#misc#window)
       in
 	resize_screen spasc da_width da_height;

@@ -20,7 +20,6 @@ let our_pos_string m =
 let sat_pos_to_string m num  = 
   let me = vm_read_ourpos m in
   let sat = vm_read_sat_pos m num in
-  let (mx,my),(sx,sy) = me,sat in
   let ax,ay = (rel_to_abs sat me) in
   abs_pos_to_string (rel_to_abs sat me)
   

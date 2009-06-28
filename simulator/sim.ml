@@ -12,7 +12,7 @@ let get_aktuator = function
 
 let get_configs = function
   | Vm.Hohmann -> [1001] (* ;1002;1003;1004] *)
-  | Vm.MeetAndGreet -> [2001] (*  [2001;2002;2003;2004]*)
+  | Vm.MeetAndGreet -> [2002] (*  [2001;2002;2003;2004]*)
   | Vm.Eccentric -> [3001]
   | Vm.ClearSky -> [4001]
 
@@ -33,9 +33,9 @@ let doit problem config =
 
 let _ = 
   if (Array.length Sys.argv) > 1 then
-    (Simulation.run_simulation Sys.argv.(1);0)
+    (ignore(Simulation.run_simulation Sys.argv.(1));0)
   else
-    let problem = Vm.Hohmann in
+    let problem = Vm.MeetAndGreet in
     let configs = get_configs problem in
     let rec loop = function 
       | [] -> 0
