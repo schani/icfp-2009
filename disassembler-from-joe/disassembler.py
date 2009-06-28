@@ -355,7 +355,7 @@ class CGenerator (CodeCollector):
 			else:
 				raise Exception('Unknown opcode %s' % op[0])
 			#if op[0] != 'noop' and op[0] != 'cmpz' and op[0] != 'output':
-			#print 'printf("%s = %%f\\n", %s);' % (var_name(addr), var_name(addr))
+			#print 'printf("%%d %d %%.8f\\n", state->num_timesteps_executed, state->%s);' % (addr, var_name(addr))
 			addr += 1
 		print '++state->num_timesteps_executed;'
 		print '}'
@@ -365,6 +365,15 @@ class CGenerator (CodeCollector):
 		self.gen_inits()
 		self.gen_loop()
 
+def to_binary(i):
+	s = ''
+	for n in range(32):
+		if i & 1:
+			s += '1'
+		else:
+			s += '0'
+		i = i >> 1
+	return s[::-1]
 
 if len(sys.argv) > 1 and sys.argv[1] == "-d":
 	backend = CodeDisassembler()
@@ -399,6 +408,8 @@ while 1:
 
 	i = struct.unpack("i", s)[0]
 	op1 = (i & 0xf0000000) >> 28
+
+	#print to_binary(i)
 
 	val = struct.unpack("d", val_s)[0]
 
