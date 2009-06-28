@@ -62,5 +62,3 @@ let run_simulation osf_filename =
   let score = vm_read_sensor m 0 in
     Printf.printf "muhkuh scored: %f in move %d\n" score m.timestep;;
 
-    
-run_simulation "3003.osf"
