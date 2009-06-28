@@ -35,12 +35,14 @@ let calc_next_pos pos prev =
 
 let magic_schani_constants = 30,75.,500.
 
+let emp_dumper = Emp_dumper.get_emp_dump_writer stdout
+
 let do_steps m time = 
-  Speculate.lookahead m time Emp_dumper.emp_dump_writer
+  Speculate.lookahead m time emp_dumper
 
 let zerothrust_steps m time = 
   Speculate.lookahead m time (fun m -> 
-    ignore(Emp_dumper.emp_dump_writer m);
+    ignore(emp_dumper m);
     (Vm.vm_write_thrust m (0.,0.)))
 
 let min x y = 

@@ -23,8 +23,10 @@ let doit problem config =
   let machine = Vm.vm_configure machine config in
   let machine = Vm.vm_set_output_filename machine ((string_of_int config)^".osf") in
   
+  let emp_dumper = Emp_dumper.get_emp_dump_writer stdout in
+
   let _ = Vm.vm_execute machine (fun m -> 
-    ignore(Emp_dumper.emp_dump_writer m);
+    ignore(emp_dumper m);
     aktuator m) 
   in
   ()
