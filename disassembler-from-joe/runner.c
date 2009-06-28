@@ -834,6 +834,24 @@ inject_bielliptical_to_circular (machine_state_t *state, double dest_apogee, dou
     g_assert_not_reached();
 }
 
+#if defined(BIN2) || defined(BIN3)
+static gboolean
+is_winning_state (machine_state_t *state)
+{
+    machine_state_t copy = *state;
+    int i;
+
+    g_assert(v_abs(v_sub(get_pos(&copy), get_meet_greet_sat_pos(&copy))) <= 1000.0);
+
+    for (i = 0; i < 900; ++i) {
+	do_timestep(&copy);
+	if (v_abs(v_sub(get_pos(&copy), get_meet_greet_sat_pos(&copy))) > 1000.0)
+	    return FALSE;
+    }
+    return TRUE;
+}
+#endif
+
 int
 main (int argc, char *argv[])
 {
@@ -953,24 +971,20 @@ main (int argc, char *argv[])
     do_n_timesteps(&global_state, 1);
     */
 
-    for (int i = 0; i < 10000; ++i) {
+    for (;;) {
 	vector_t our_pos = get_pos(&global_state);
 	vector_t sat_pos = get_meet_greet_sat_pos(&global_state);
 	vector_t our_speed = get_speed(&global_state);
 	vector_t sat_speed = get_speed_generic(&global_state, get_meet_greet_sat_pos);
 	vector_t pos_diff = v_sub(sat_pos, our_pos);
 
+	if (v_abs(pos_diff) < 1000.0 && is_winning_state(&global_state))
+	    break;
+
 	if (v_abs(pos_diff) > 1.0) {
 	    vector_t speed_diff = v_sub(sat_speed, our_speed);
 	    vector_t scaled_v = v_add(speed_diff, v_mul_scal(v_norm(v_sub(sat_pos, our_pos)),
 							     MIN(v_abs(pos_diff), global_state.output[1]) / 50.0));
-
-	    /*
-	      vector_t direct_v = v_add(v_add(v_mul_scal(our_speed, -1.0),
-	      v_sub(sat_pos, our_pos)),
-	      sat_speed);
-	      vector_t scaled_v = v_mul_scal(v_norm(direct_v), global_state.output[1] / 1000.0);
-	    */
 
 	    g_print("%d distance %f   fuel %f   our speed (%f) ",
 		    i, v_abs(pos_diff), global_state.output[1], v_abs(our_speed));
@@ -984,10 +998,8 @@ main (int argc, char *argv[])
 	    set_thrust(&global_state, scaled_v);
 
 	    do_n_timesteps(&global_state, 50);
-	    /*
 	} else {
 	    do_n_timesteps(&global_state, 1);
-	    */
 	}
     }
 
