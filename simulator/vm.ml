@@ -284,8 +284,11 @@ let vm_execute_n_steps n m =
   loop n m
 
 let vm_is_done m = 
+  let ret =   (((vm_read_sensor m 0) <> 0.) || (m.timestep = 3000000)) in
   (* score written || 3M timesteps  -> eog *)
-  (((vm_read_sensor m 0) <> 0.) || (m.timestep = 3000000))
+  if ret then
+    Printf.fprintf stderr "we have reached the end of the world @ %d %f\n" m.timestep (vm_read_score m);
+  ret
   
 
 let open_writer filname m = 
