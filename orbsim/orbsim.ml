@@ -2,8 +2,6 @@
  *)
 
 (* TODO:
-   + pan (aber keine floete)
-   + trace
    + ruler
 *)
 
@@ -14,11 +12,12 @@ let diewoed = Cairo_png.image_surface_create_from_file "/tmp/erde.png"
 *)
 
 let earth_r = 6357000.0
-let moon_r =  173600.0 (* mycrometer genau! *)
+let moon_r =  1736000.0 (* mycrometer genau! *)
 let initial_zoom = 100.0
 let initial_speed = 10
-let pi = atan 1. *. 4.0;;
-let two_pi = pi *. 2.0;;
+let pi = atan 1. *. 4.0
+let two_pi = pi *. 2.0
+let border = 1000.0
 
 let rgb_white =   1.0, 1.0, 1.0
 let rgb_red =     1.0, 0.0, 0.0
@@ -27,6 +26,7 @@ let rgb_blue =    0.0, 0.0, 1.0
 let rgb_yellow =  1.0, 1.0, 0.0
 let rgb_cyan =    0.0, 1.0, 1.0
 let rgb_magenta = 1.0, 0.0, 1.0
+let rgb_gray =    0.1, 0.1, 0.1
 let rgb_black =   0.0, 0.0, 0.0
 
 let our_x = ref 0.0
@@ -36,87 +36,85 @@ let our_sats = ref []
 let our_moons = ref []
 let our_massband = ref None
 
+let limit_x1 = ref (0.0 -. earth_r *. 2.0)
+let limit_y1 = ref (0.0 -. earth_r *. 2.0)
+let limit_x2 = ref (earth_r *. 2.0)
+let limit_y2 = ref (earth_r *. 2.0)
+
 let our_history :(float * float) list ref = ref []
 let our_sats_histories :(float * float) list array =
   [| []; []; []; []; []; []; []; []; []; []; []; []; |]
 
 (* 0,0 is always in middle of screen (coords of earth) *)
 type space_screen = {
-  mutable zoom :float; (* .. radius int space that is displayed around earth *)
+  mutable zoom :float; (* .. radius that shall fit into spaceview *)
   mutable speed :int; (* replay speed *)
-  mutable screen_width :int;
-  mutable screen_height :int;
-  mutable screen_minlen :float;
-  mutable screen_x_pre :float;
-  mutable screen_y_pre :float;
-  mutable spaceview_x1 :float;
-  mutable spaceview_y1 :float;
-  mutable spaceview_width :float;
-  mutable spaceview_height :float;
-  mutable spaceview_minlen :float; (* min (witdh, height) *)
+  mutable screen_width :float;  (* set by user (gtk resize) *)
+  mutable screen_height :float;
+  mutable spaceview_x :float; (* center of spaceview .. *)
+  mutable spaceview_y :float; (* .. modified by panning *)
+  mutable spaceview_width :float;  (* size of view currently displayed .. *)
+  mutable spaceview_height :float; (* .. modified by zoom or gtk resize *)
 }
 
-let spasc_dump spasc =
-  Printf.fprintf stderr "SPASC: zoom=%f, speed=%i, screen=%ix%i, sv_x1=%f, sv_x2=%f, sv=%fx%f, sv_minlen=%f, screen_x_pre=%f, screen_y_pre=%f\n"
-    spasc.zoom spasc.speed spasc.screen_width spasc.screen_height
-    spasc.spaceview_x1 spasc.spaceview_y1
-    spasc.spaceview_width spasc.spaceview_height spasc.spaceview_minlen
-    spasc.screen_x_pre spasc.screen_y_pre;
-  flush stderr
-    
-let spasc_recalc spasc =
-  spasc.screen_minlen <-
-    float_of_int (min spasc.screen_height spasc.screen_width);
-  spasc.spaceview_minlen <- min spasc.spaceview_height spasc.spaceview_width;
-  if spasc.screen_width > spasc.screen_height then begin
-    spasc.screen_x_pre <- 0.0;
-    spasc.screen_y_pre <-
-      (float_of_int (spasc.screen_height - spasc.screen_width)) /. 2.0
-  end else begin
-    spasc.screen_x_pre <-
-      (float_of_int (spasc.screen_width - spasc.screen_height)) /. 2.0;
-    spasc.screen_y_pre <- 0.0
-  end
-
-let spasc_refocus spasc =
-  let xdiff = spasc.spaceview_width -. spasc.zoom
-  and ydiff = spasc.spaceview_height -. spasc.zoom
-  in
-    if xdiff <> 0.0 or xdiff <> 0.0 then begin
-      spasc.spaceview_x1 <- spasc.spaceview_x1 +. (xdiff /. 2.0);
-      spasc.spaceview_y1 <- spasc.spaceview_y1 +. (ydiff /. 2.0);
-      spasc.spaceview_width <- spasc.spaceview_width -. xdiff;
-      spasc.spaceview_height <- spasc.spaceview_height -. ydiff;
-      spasc_recalc spasc
-    end
-
-let prev_screen_height = ref 0
-let prev_screen_width = ref 0
-
-let resize_screen spasc height width =
-  if (height <> !prev_screen_height) or (width <> !prev_screen_width) then begin
-(*    Printf.fprintf stderr "resize_screen\n"; flush stderr; *)
-    spasc.screen_height <- height; 
-    spasc.screen_width <- width;
-    spasc_recalc spasc
-  end
-
+(* convert spaceview coord into screen coord
+ *)
 let ccx spasc coord =
-  ((coord -. spasc.spaceview_x1) *. (spasc.screen_minlen -. 1.0)) /.
-    spasc.spaceview_minlen -. spasc.screen_x_pre
-
+  if coord < (!limit_x1 -. border) then (* store limits for scrollers *)
+    limit_x1 := coord -. border;
+  if coord > (!limit_x2 +. border) then
+    limit_x2 := coord +. border;
+  ((coord -. spasc.spaceview_x) *. (spasc.screen_width -. 1.0)) /.
+    spasc.spaceview_width +. spasc.screen_width /. 2.0
 let ccy spasc coord =
-  ((coord -. spasc.spaceview_y1) *. (spasc.screen_minlen -. 1.0)) /.
-    spasc.spaceview_minlen -. spasc.screen_y_pre
-
+  if coord < (!limit_y1 -. border) then (* store limits for scrollers *)
+    limit_y1 := coord -. border;
+  if coord > (!limit_y2 +. border) then
+    limit_y2 := coord +. border;
+  ((coord -. spasc.spaceview_y) *. (spasc.screen_height -. 1.0)) /.
+    spasc.spaceview_height +. spasc.screen_height /. 2.0
 
 (* convert a value (radius, ..)
-*)
+ *)
 let vc spasc value =
-  value *. spasc.screen_minlen /. spasc.spaceview_minlen
+  (value *. spasc.screen_height) /. spasc.spaceview_height
 
 let vc' spasc value' =
-  value' *. spasc.spaceview_minlen /. spasc.screen_minlen
+  value' *. spasc.spaceview_height /. spasc.screen_height
+
+let spasc_dump spasc =
+  Printf.fprintf stderr "SPASC: zoom=%f, speed=%i, screen=%fx%f\n     sv_x=%f, sv_x=%f, sv=%fx%f\n"
+    spasc.zoom spasc.speed spasc.screen_width spasc.screen_height
+    spasc.spaceview_x spasc.spaceview_y
+    spasc.spaceview_width spasc.spaceview_height;
+  flush stderr
+
+(* recalculates spaceview_height and witdh
+ * required after: zooming, panning, window resize
+ *)
+let recalculate_spaceview spasc =
+  (* window size is fixed, zoom ratio user defined so we need to calculate
+   * spaceview_*
+   * we can't use vc' since it depends on correct spaceview_* values
+   * so we calculate that zoomer
+   *)
+  if spasc.screen_height > spasc.screen_width then begin
+    spasc.spaceview_width <- 2.0 *. spasc.zoom;
+    spasc.spaceview_height <-
+      spasc.spaceview_width *. (spasc.screen_height /. spasc.screen_width);
+  end else begin
+    spasc.spaceview_height <- 2.0 *. spasc.zoom;
+    spasc.spaceview_width <-
+      spasc.spaceview_height *. (spasc.screen_width /. spasc.screen_height);
+  end
+
+(* called when drawing area is resized,
+ * has to adjust the space_viewport because of aspect ratio 
+ *)
+let resize_screen spasc new_height new_width =
+  spasc.screen_width <- float_of_int new_width;
+  spasc.screen_height <- float_of_int new_height;
+  recalculate_spaceview spasc
 
 let surface_from_gdk_pixmap gdkpixmap =
   Cairo_lablgtk.create gdkpixmap
@@ -222,6 +220,20 @@ let show_massband surface spasc = function
 let create_space surface spasc =
   show_earth surface spasc
 
+let dist_human_readable x1 y1 x2 y2 =
+  match max (max (abs_float x1) (abs_float y1))
+    (max (abs_float x2) (abs_float y2)) with
+    | v when v < 1000.0 ->
+	(x1, y1, x2, y2, "m")
+    | v when v < 1000000.0 ->
+	(x1 /. 1000.0, y1 /. 1000.0, x2 /. 1000.0, y2 /. 1000.0, "km")
+    | v when v < 1000000000.0 ->
+	(x1 /. 1000000.0, y1 /. 1000000.0,
+	 x2 /. 1000000.0, y2 /. 1000000.0, "Mm")
+    | v ->
+	(x1 /. 1000000000.0, y1 /. 1000000000.0,
+	 x2 /. 1000000000.0, y2 /. 1000000000.0, "Gm")
+
 let refresh_da da =
   GtkBase.Widget.queue_draw da#as_widget
 
@@ -232,22 +244,27 @@ let update_status_line = (!status_line)#set_text
 let make_orbit_window () =
   let spasc = { zoom = earth_r /. 20.0 *. initial_zoom;
 		speed = initial_speed;
-		screen_height = 500;
-		screen_width = 500;
-		screen_minlen = 500.0;
-		screen_x_pre = 0.0;
-		screen_y_pre = 0.0;
-		spaceview_x1 = 0.0 -. earth_r *. initial_zoom;
-		spaceview_y1 = 0.0 -. earth_r *. initial_zoom;
-		spaceview_width = 2.0 *. earth_r *. initial_zoom;
-		spaceview_height = 2.0 *. earth_r *. initial_zoom;
-		spaceview_minlen = 2.0 *. earth_r *. initial_zoom;
+		screen_height = 500.0;
+		screen_width = 500.0;
+		spaceview_x = 0.0;
+		spaceview_y = 0.0;
+		spaceview_width = 2.0 *. initial_zoom;
+		spaceview_height = 2.0 *. initial_zoom;
 	      }
   in let w = GWindow.window ~height:500 ~width:500 ()
   in let vbox = GPack.vbox ~packing:w#add ~homogeneous:false ()
-  in let scrollwin = GBin.scrolled_window ~border_width:1 ~hpolicy:`AUTOMATIC
-      ~vpolicy:`AUTOMATIC ~packing:(vbox#pack ~expand:true) ()
-  in let da = GMisc.drawing_area ~packing:scrollwin#add ()
+  in let table = GPack.table ~rows:4 ~columns:4 ~homogeneous:false
+      ~packing:(vbox#pack ~expand:true) ()
+  in let da = GMisc.drawing_area
+      ~packing:(table#attach ~left:1 ~right:2 ~top:1 ~bottom:2 ~expand:`BOTH) ()
+  in let unitlabel = GMisc.label ~text:"[]"
+      ~packing:(table#attach ~left:0 ~right:1 ~top:0 ~bottom:1) ()
+  in let xruler= GRange.ruler `HORIZONTAL ~metric:`PIXELS
+      ~upper:1000.0 ~lower:0.0 ~max_size:100.0 ~show:true
+      ~packing:(table#attach ~left:1 ~right:2 ~top:0 ~bottom:1 ~fill:`BOTH) ()
+  in let yruler = GRange.ruler `VERTICAL ~metric:`PIXELS
+      ~upper:1000.0 ~lower:0.0 ~max_size:100.0 ~show:true
+      ~packing:(table#attach ~left:0 ~right:1 ~top:1 ~bottom:2 ~fill:`BOTH) ()
   in let hbox1 = GPack.hbox ~packing:(vbox#pack ~expand:false) ()
   in let hbox2 = GPack.hbox ~packing:(vbox#pack ~expand:false) ()
   in let bplay = GButton.button ~label:"Play" ~packing:hbox1#pack ()
@@ -259,17 +276,50 @@ let make_orbit_window () =
   in let scrolly = GData.adjustment ~value:0.0
       ~lower:(0.0 -. initial_zoom *. earth_r) ~upper:(initial_zoom *. earth_r)
       ~step_incr:1.0 ~page_incr:50.0 ~page_size:1.0 ()
+  in let _ = GRange.scrollbar `HORIZONTAL ~adjustment:scrollx
+      ~packing:(table#attach ~left:1 ~right:2 ~top:2 ~bottom:3 ~fill:`BOTH) ()
+  in let _ = GRange.scrollbar `VERTICAL ~adjustment:scrolly
+      ~packing:(table#attach ~left:2 ~right:3 ~top:1 ~bottom:2 ~fill:`BOTH) ()
   in let zoomer = GData.adjustment ~value:initial_zoom ~lower:1.0
       ~upper:100000.0 ~step_incr:1.0 ~page_incr:200.0 ~page_size:1.0 ()
   in let speeder = GData.adjustment ~value:(float_of_int initial_speed)
       ~lower:1.0 ~upper:10000.0 ~step_incr:1.0 ~page_incr:50.0 ~page_size:1.0 ()
   in let playing = ref false
+  in let update_scollers () = (* updates scrollers to reflect spasc *)
+      (*
+      scrollerx#set_bounds ~lower:!limit_x1 ~upper:!limit_x2
+	~step_incr:10.0 ~page_incr:50.0 ~page_size:spasc.spaceview_width ();
+       scrollery#set_bounds ~lower:!limit_y1 ~upper:!limit_y2
+	 ~step_incr:10.0 ~page_incr:50.0 ~page_size:spasc.spaceview_height ();
+       scrollerx#set_value 0.0;
+      *)
+    (*
+    xruler#set_lower !limit_x1;
+    xruler#set_upper !limit_x2;
+    *)
+       (*
+	 Printf.fprintf stderr "ruler y to lower=%f upper=%f\n"
+	 spasc.spaceview_y1 (spasc.spaceview_y1 +. spasc.spaceview_height);
+	 flush stderr;
+       *)
+      let svx1, svy1, svx2, svy2, units =
+	dist_human_readable
+	  (spasc.spaceview_x -. (spasc.spaceview_width /. 2.0))
+	  (spasc.spaceview_y -. (spasc.spaceview_height /. 2.0))
+	  (spasc.spaceview_x +. (spasc.spaceview_width /. 2.0))
+	  (spasc.spaceview_y +. (spasc.spaceview_height /. 2.0))
+      in
+	yruler#set_lower svy1;
+	yruler#set_upper svy2;
+	xruler#set_lower svx1;
+	xruler#set_upper svx2;
+	unitlabel#set_text units
   in
-    scrollwin#set_hadjustment scrollx;
-    scrollwin#set_vadjustment scrolly;
     ignore (zoomer#connect#value_changed
 	      (fun () ->
-		 spasc.zoom <- zoomer#value *. earth_r /. 20.0; refresh_da da));
+		 spasc.zoom <- zoomer#value *. earth_r /. 20.0;
+		 recalculate_spaceview spasc;
+		 refresh_da da));
     ignore (speeder#connect#value_changed
 	      (fun () ->
 		 spasc.speed <- int_of_float speeder#value));
@@ -290,10 +340,9 @@ let make_orbit_window () =
       let da_width, da_height = Gdk.Drawable.get_size (da#misc#window)
       in let pixmap = GDraw.pixmap ~width:da_width ~height:da_height ()
       in
-	spasc_refocus spasc;
 	resize_screen spasc da_width da_height;
 	ignore (w#connect#destroy GMain.quit);
-	pixmap#set_foreground (`NAME "black");
+	pixmap#set_foreground (`NAME "darkgray");
 	pixmap#rectangle ~x:0 ~y:0 ~width:da_width ~height:da_height
 	  ~filled:true ();
 	let surface = (surface_from_gdk_pixmap pixmap#pixmap)
@@ -317,7 +366,8 @@ let make_orbit_window () =
     in let remove_timeout = ref (fun () -> ())
     in let rec timeout_handler () =
 	if !playing then begin
-	  let stamp, score, fuel, x, y, orbits, sats, moons, rem =
+	  let stamp, score, fuel, x, y,
+	    orbits, sats, moons, fusts, debugs, rem =
 	    q.Vmbridge.step spasc.speed;
 	  in let rec record_more_traces ?(i=0) = function
 		[] -> ()
@@ -403,17 +453,20 @@ let make_orbit_window () =
 	let mx = GdkEvent.Motion.x ev
 	and my = GdkEvent.Motion.y ev
 	in
+	  ignore (xruler#event#send (ev :> GdkEvent.any));
+	  ignore (yruler#event#send (ev :> GdkEvent.any));
 	  if !left_pressed then begin
 	    let oldx, oldy = !mouse_coords
 	    in
-	      spasc.spaceview_x1 <-
-		spasc.spaceview_x1 +. (oldx -. mx) *.
-		(spasc.zoom /. (float_of_int spasc.screen_width));
-	      spasc.spaceview_y1 <-
-		    spasc.spaceview_y1 +. (oldy -. my) *.
-		(spasc.zoom /. (float_of_int spasc.screen_height));
+	      spasc.spaceview_x <-
+		spasc.spaceview_x +. (oldx -. mx) *.
+		(spasc.zoom /. spasc.screen_width);
+	      spasc.spaceview_y <-
+		    spasc.spaceview_y +. (oldy -. my) *.
+		(spasc.zoom /. spasc.screen_height);
 	      mouse_coords := mx, my;
-	      spasc_refocus spasc;
+	      recalculate_spaceview spasc;
+	      update_scollers ();
 	      refresh_da da
 	  end;
 	  if !right_pressed then begin
@@ -426,16 +479,22 @@ let make_orbit_window () =
        and scroll_callback ev =
 	match GdkEvent.get_type ev with
 	  | `SCROLL ->
-	      if GdkEvent.Scroll.direction ev = `UP then
+	      if GdkEvent.Scroll.direction ev = `UP then begin
 		if zoomer#value <= 20.0 then
 		  zoomer#set_value (zoomer#value +. 3.0)
 		else
 		  zoomer#set_value (zoomer#value +. 20.0);
-	      if GdkEvent.Scroll.direction ev = `DOWN then
-		if zoomer#value <= 20.0 then
+		recalculate_spaceview spasc;
+		refresh_da da
+	      end;
+	      if GdkEvent.Scroll.direction ev = `DOWN then begin
+		if zoomer#value <= 20.0 then 
 		  zoomer#set_value (zoomer#value -. 3.0)
 		else
 		  zoomer#set_value (zoomer#value -. 20.0);
+		recalculate_spaceview spasc;
+		refresh_da da
+	      end;
 	      true
     in
       ignore (da#event#connect#expose ~callback:redraw_all);
@@ -443,7 +502,8 @@ let make_orbit_window () =
       ignore (da#event#connect#button_release mbutton_callback);
       ignore (da#event#connect#scroll scroll_callback);
       ignore (da#event#connect#motion_notify mmove_callback);
-      da#event#add [`BUTTON_PRESS; `BUTTON_RELEASE; `BUTTON_MOTION];
+      da#event#add [`BUTTON_PRESS; `BUTTON_RELEASE; `BUTTON_MOTION;
+		    `POINTER_MOTION; `POINTER_MOTION_HINT];
       ignore (bplay#connect#clicked ~callback:
 		(function () ->
 		   if !playing then stop_playing () else start_playing ()));

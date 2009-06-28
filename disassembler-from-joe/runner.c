@@ -29,6 +29,7 @@ typedef void (*set_new_value_func_t) (guint32 addr, double new_value, gpointer u
 #include "bin3.c"
 #elif defined(BIN4)
 #include "bin4.c"
+#define SCENARIO 4001
 #else
 #error bla
 #endif
@@ -37,6 +38,8 @@ typedef vector_t (*get_pos_func_t) (machine_state_t *state);
 
 typedef double (*fuel_divisor_func_t) (machine_state_t *state, gpointer user_data);
 typedef int (*skip_size_func_t) (machine_state_t *state, gpointer user_data);
+typedef gboolean (*termination_condition_func_t) (machine_state_t *state, get_pos_func_t get_pos_func,
+						  gpointer user_data);
 
 FILE *dump_file = NULL;
 FILE *global_trace = NULL;
@@ -238,7 +241,8 @@ global_timestep (void)
 	exit(0);
     }
     */
-    write_timestep(global_trace, &global_old_inputs, &global_state.inputs);
+    if (global_trace != NULL) 
+    	write_timestep(global_trace, &global_old_inputs, &global_state.inputs);
     global_old_inputs = global_state.inputs;
     timestep(&global_state);
     print_timestep(&global_state);
@@ -859,38 +863,50 @@ inject_bielliptical_to_circular (machine_state_t *state, double dest_apogee, dou
     g_assert_not_reached();
 }
 
-#if defined(BIN2) || defined(BIN3)
 static gboolean
-is_winning_state (machine_state_t *state)
+is_winning_state (machine_state_t *state, get_pos_func_t get_pos_func)
 {
     machine_state_t copy = *state;
     int i;
 
-    g_assert(v_abs(v_sub(get_pos(&copy), get_meet_greet_sat_pos(&copy))) <= WINNING_RADIUS);
+    if (v_abs(v_sub(get_pos(&copy), get_pos_func(&copy))) > WINNING_RADIUS)
+	return FALSE;
 
     for (i = 0; i < WINNING_TIMESTEPS; ++i) {
 	do_timestep(&copy);
-	if (v_abs(v_sub(get_pos(&copy), get_meet_greet_sat_pos(&copy))) > WINNING_RADIUS)
+	if (v_abs(v_sub(get_pos(&copy), get_pos_func(&copy))) > WINNING_RADIUS)
 	    return FALSE;
     }
     return TRUE;
+}
+
+static gboolean
+is_meet_greet_terminated (machine_state_t *state, get_pos_func_t get_pos_func, gpointer user_data)
+{
+    vector_t our_pos = get_pos(state);
+    vector_t sat_pos = get_pos_func(state);
+    vector_t pos_diff = v_sub(sat_pos, our_pos);
+
+    if (state->num_timesteps_executed >= MAX_TIMESTEPS)
+	return TRUE;
+    if (state->output[0] != 0.0)
+	return TRUE;
+    return is_winning_state(state, get_pos_func);
 }
 
 static double
 do_follower (machine_state_t *state, get_pos_func_t get_pos_func,
 	     fuel_divisor_func_t fuel_divisor_func, gpointer fuel_divisor_data,
 	     skip_size_func_t skip_size_func, gpointer skip_size_data,
+	     termination_condition_func_t termination_condition_func, gpointer termination_condition_data,
 	     gboolean print)
 {
-    while (state->num_timesteps_executed < MAX_TIMESTEPS && state->output[0] == 0.0) {
+    while (!termination_condition_func(state, get_pos_func, termination_condition_data)) {
 	vector_t our_pos = get_pos(state);
 	vector_t sat_pos = get_pos_func(state);
 	vector_t our_speed = get_speed(state);
 	vector_t sat_speed = get_speed_generic(state, get_pos_func);
 	vector_t pos_diff = v_sub(sat_pos, our_pos);
-
-	if (v_abs(pos_diff) < WINNING_RADIUS && is_winning_state(state))
-	    break;
 
 	if (v_abs(pos_diff) > 1.0) {
 	    vector_t speed_diff = v_sub(sat_speed, our_speed);
@@ -936,7 +952,6 @@ constant_skip_size_func (machine_state_t *state, gpointer user_data)
 {
     return *(int*)user_data;
 }
-#endif
 
 static void
 run_trace_file (FILE *file, machine_state_t *state)
@@ -1014,18 +1029,25 @@ main (int argc, char *argv[])
 		scenario = atoi(optarg);
 		break;
 
+            case '?' :
+                printf("USAGE: %s -d <dumpfile> -s <scenario id>  [-i <inputtrace> | -t <outputtrace>]\n", argv[0]);
+                break;
+
 	    default :
 		g_assert_not_reached();
 	}
     }
 
+
     if (trace_input_file == NULL && scenario < 0) {
 	g_print("need scenario\n");
+        printf("USAGE: %s -d <dumpfile> -s <scenario id>  [-i <inputtrace> | -t <outputtrace>]\n", argv[0]);
 	return 1;
     }
 
     if (trace_input_file != NULL && global_trace_name != NULL) {
 	g_print("cannot have both input and output traces\n");
+        printf("USAGE: %s -d <dumpfile> -s <scenario id>  [-i <inputtrace> | -t <outputtrace>]\n", argv[0]);
 	return 1;
     }
 
@@ -1168,6 +1190,7 @@ main (int argc, char *argv[])
 	    score = do_follower(&copy, get_meet_greet_sat_pos,
 				constant_fuel_divisor_func, &divisor,
 				constant_skip_size_func, &skip,
+				is_meet_greet_terminated, NULL,
 				FALSE);
 	    //g_print(";%f", score);
 	    g_print("score is %f\n", score);
@@ -1186,6 +1209,7 @@ main (int argc, char *argv[])
 	do_follower(&global_state, get_meet_greet_sat_pos,
 		    constant_fuel_divisor_func, &best_divisor,
 		    constant_skip_size_func, &best_skip,
+		    is_meet_greet_terminated, NULL,
 		    TRUE);
 	g_print("best score %f with divisor %f and skip %d\n", best_score, best_divisor, best_skip);
     }
@@ -1204,7 +1228,8 @@ main (int argc, char *argv[])
 
     g_print("score is %f\n", global_state.output[0]);
 
-    write_count(&global_state, 0, global_trace);
+    if (global_trace != NULL) //no odea if this is needed at all ;)
+	write_count(&global_state, 0, global_trace);
 
     if (global_trace != NULL)
 	fclose(global_trace);
