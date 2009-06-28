@@ -35,8 +35,7 @@ let basic_read_memory_line (ic,i) =
       (data,insn)
   in
   (data,insn),(ic,i)
-      
-      
+
 let get_size (ic,_)     = 
   ((in_channel_length ic) / (8+4))
 
