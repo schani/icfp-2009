@@ -33,8 +33,7 @@ let doit problem config =
 
 let _ = 
   if (Array.length Sys.argv) > 1 then
-    0
-    (* Osf_simulator.simulate Sys.argv.(1)*)
+    (Simulation.run_simulation Sys.argv.(1);0)
   else
     let problem = Vm.Hohmann in
     let configs = get_configs problem in
