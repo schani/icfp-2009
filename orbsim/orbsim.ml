@@ -400,7 +400,7 @@ let make_orbit_window () =
       in let pixmap = GDraw.pixmap ~width:da_width ~height:da_height ()
       in
 	ignore (w#connect#destroy GMain.quit);
-	pixmap#set_foreground (`NAME "darkgray");
+	pixmap#set_foreground (`NAME "black");
 	pixmap#rectangle ~x:0 ~y:0 ~width:da_width ~height:da_height
 	  ~filled:true ();
 	let surface = (surface_from_gdk_pixmap pixmap#pixmap)
@@ -618,7 +618,8 @@ let make_orbit_window () =
 		(function () ->
 		   spasc.spaceview_x <- 0.0;
 		   spasc.spaceview_y <- 0.0;
-		   zoomer#set_value initial_zoom));
+		   zoomer#set_value initial_zoom;
+		   refresh_da da));
       let da_width, da_height = Gdk.Drawable.get_size (da#misc#window)
       in
 	resize_screen spasc da_width da_height;
