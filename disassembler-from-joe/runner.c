@@ -29,6 +29,7 @@ typedef void (*set_new_value_func_t) (guint32 addr, double new_value, gpointer u
 #include "bin3.c"
 #elif defined(BIN4)
 #include "bin4.c"
+#define SCENARIO 4001
 #else
 #error bla
 #endif
@@ -238,7 +239,8 @@ global_timestep (void)
 	exit(0);
     }
     */
-    write_timestep(global_trace, &global_old_inputs, &global_state.inputs);
+    if (global_trace != NULL) 
+    	write_timestep(global_trace, &global_old_inputs, &global_state.inputs);
     global_old_inputs = global_state.inputs;
     timestep(&global_state);
     print_timestep(&global_state);
@@ -1014,18 +1016,25 @@ main (int argc, char *argv[])
 		scenario = atoi(optarg);
 		break;
 
+            case '?' :
+                printf("USAGE: %s -d <dumpfile> -s <scenario id>  [-i <inputtrace> | -t <outputtrace>]\n", argv[0]);
+                break;
+
 	    default :
 		g_assert_not_reached();
 	}
     }
 
+
     if (trace_input_file == NULL && scenario < 0) {
 	g_print("need scenario\n");
+        printf("USAGE: %s -d <dumpfile> -s <scenario id>  [-i <inputtrace> | -t <outputtrace>]\n", argv[0]);
 	return 1;
     }
 
     if (trace_input_file != NULL && global_trace_name != NULL) {
 	g_print("cannot have both input and output traces\n");
+        printf("USAGE: %s -d <dumpfile> -s <scenario id>  [-i <inputtrace> | -t <outputtrace>]\n", argv[0]);
 	return 1;
     }
 
@@ -1204,7 +1213,8 @@ main (int argc, char *argv[])
 
     g_print("score is %f\n", global_state.output[0]);
 
-    write_count(&global_state, 0, global_trace);
+    if (global_trace != NULL) //no odea if this is needed at all ;)
+	write_count(&global_state, 0, global_trace);
 
     if (global_trace != NULL)
 	fclose(global_trace);
