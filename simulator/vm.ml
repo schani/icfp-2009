@@ -16,7 +16,7 @@ let get_file_for_problem = function
   | Hohmann ->  "../angabe/bin1.obf"
   | MeetAndGreet -> "../angabe/bin2.obf"
   | Eccentric -> "../angabe/bin3.obf"
-  | ClearSky -> failwith "streber!" (* "../angabe/bin4.obf" *)
+  | ClearSky -> "../angabe/bin4.obf"
 
 
 type machine_state = 
@@ -34,8 +34,6 @@ type machine_state =
       timestep: int;
       config: float;
     }
-
-let memsize = 0x4000
 
 let check_config problem = function
   | 1001 | 1002 | 1003 | 1004 ->
@@ -61,7 +59,8 @@ let read_insn m idx =
   m.insnmem.(idx)
 
 
-let alloc_machine problem = 
+
+let alloc_machine problem memsize = 
   let data = Array.make memsize 0. in
   let insn = Array.make memsize Instructions.zero in
   {
@@ -106,7 +105,6 @@ let is_instruction m =
   (read_insn m m.instruction_pointer) <> Instructions.No_Instruction 
     
 let save_result m res = 
-  (* Printf.printf "schani: v%d:=%f\n" m.instruction_pointer res; *)
   write_data m m.instruction_pointer res;
   m
 
@@ -149,8 +147,6 @@ let insn_to_string m = function
 
 let execute_one_instruction m = 
   let m,insn = fetch_insn m in
-  (* Printf.printf "%d %s\n" m.instruction_pointer 
-     (insn_to_string m insn);  *)
   match insn with
     | No_Instruction -> 
 	m
@@ -204,8 +200,8 @@ let vm_read_sensor m port =
     m.output_ports.(port)  
     
 let vm_init_machine problem = 
-  let m = alloc_machine problem in
   let ic = Basic_reader.open_obf (get_file_for_problem problem) in 
+  let m = alloc_machine problem (Basic_reader.get_size ic) in
   let rec loop ic = 
     let (data,insn),(ic) = Basic_reader.basic_read_memory_line ic in
     let (_,i) = ic in 
@@ -260,8 +256,6 @@ let open_writer filname m =
       else
 	(0x3E80,m.config)::diff
     in
-    (* if diff <> [] then 
-       Printf.printf "%d %d changes\n" m.timestep (List.length diff); *)
     if diff <> [] then
       Basic_writer.output_frame oc (m.timestep,diff);
     exchange_inputs m;
@@ -286,14 +280,11 @@ let vm_execute m controller =
   let rec loop m = 
     let m = writer m in
     let m = vm_execute_one_step m in
-    (*    Array.iteri (fun i f -> Printf.printf "DUMP %d %f\n" i f) m.datamem;*)
-    (* Printf.printf "%c%07d" (Char.chr 0x0d) m.timestep; *)
     if vm_is_done m then
       (closer m; m)
     else
       loop (controller m)
   in
   let m = loop m in 
-  Printf.printf "muhkuh scored: %f in move %d\n" (vm_read_sensor m 0) m.timestep;
   m 
     

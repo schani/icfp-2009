@@ -38,8 +38,8 @@ let calc_transfer_strat m =
   (* Printf.printf "starting timecalc with %f %f %f %f"
     (x !pos0) (y !pos0) 
     (x !pos1) (y !pos1); 
-  Printf.printf " %f %f %f %f\n"
-    (x !tpos0) (y !tpos0) 
+     Printf.printf " %f %f %f %f\n"
+     (x !tpos0) (y !tpos0) 
      (x !tpos1) (y !tpos1);  *)
   let timetotransfer = (int_of_float
     (* Hohmann.time_to_start *)
@@ -83,6 +83,7 @@ let square x = x*.x
 let vecdiff (x1,y1) (x2,y2) = 
   (x2-x1,y1,y2)
 
+let mindist = ref 10000000.
 
 let length (x,y) = 
   let xx = square x in
@@ -113,7 +114,12 @@ let aktuator =
 	  pos1 := (posx,posy);
 	  tpos1 := (targetx,targety)
 	);
-      Printf.fprintf stderr "distance %d to dst: %f %f\n" m.timestep (length !tpos1) (length !pos1); 
+      let dist = (length !tpos1) in
+      (
+	if dist < !mindist then
+	  mindist := dist;
+	(* Printf.fprintf stderr "distance %d to dst: %f %f\n" m.timestep dist !mindist; *)
+      );
       ()
     end;
 
@@ -149,6 +155,20 @@ let aktuator =
 	      in
 	      let m = vm_write_actuator m DeltaY (y !strategy.second_thrust)
 	      in
+	      m
+	  | step when step > !strategy.second_thrust_time + 2 ->
+	      let (x,y) = 
+		if (m.timestep mod 30000) <> 0 then
+		  (0.,0.)
+		else
+		  Correction.calc_correction 
+		    (x !pos0) (y !pos0) 
+		    (x !pos1) (y !pos1)
+		    (x !tpos0) (y !tpos0) 
+		    (x !tpos1) (y !tpos1)
+	      in
+	      let m = vm_write_actuator m DeltaX x in
+	      let m = vm_write_actuator m DeltaY y in
 	      m
 	  | _ ->
 	      let m = vm_write_actuator m DeltaX 0. in
