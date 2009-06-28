@@ -72,15 +72,15 @@ let alloc_machine problem =
     insnmem = insn; 
     statusreg = false;
     instruction_pointer = -1;
-    input_ports = Array.make (0x9 + 3*11) 0.;
-    old_input_ports = Array.make (0x9 + 3*11) 0.;
-    output_ports = Array.make 0x5 0.;
+    input_ports =  Array.make 0x4 0.;
+    old_input_ports = Array.make 0x4 0.;
+    output_ports = Array.make (0x9 + 3*11) 0.;
     timestep = 0;
     config = 0.;
   }
 
 let exchange_inputs m = 
-  {m with input_ports = m.old_input_ports; old_input_ports = m.input_ports}
+  {m with old_input_ports = Array.copy m.input_ports}
 
 let inputs_diff m = 
   let len = Array.length m.input_ports in
@@ -254,6 +254,14 @@ let open_writer filname m =
 
   let write_frame m = 
     let diff = inputs_diff m in
+    let diff = 
+      if m.timestep <> 0 then
+	diff
+      else
+	(0x3E80,m.config)::diff
+    in
+    (* if diff <> [] then 
+       Printf.printf "%d %d changes\n" m.timestep (List.length diff); *)
     if diff <> [] then
       Basic_writer.output_frame oc (m.timestep,diff);
     exchange_inputs m;
@@ -276,15 +284,16 @@ let vm_execute m controller =
       (fun m -> m),(fun m -> ())
   in
   let rec loop m = 
+    let m = writer m in
     let m = vm_execute_one_step m in
     (*    Array.iteri (fun i f -> Printf.printf "DUMP %d %f\n" i f) m.datamem;*)
     (* Printf.printf "%c%07d" (Char.chr 0x0d) m.timestep; *)
     if vm_is_done m then
       (closer m; m)
     else
-      (writer m; loop (controller m))
+      loop (controller m)
   in
   let m = loop m in 
-  Printf.printf "muhkuh scored: %f\n" (vm_read_sensor m 0);
+  Printf.printf "muhkuh scored: %f in move %d\n" (vm_read_sensor m 0) m.timestep;
   m 
     
