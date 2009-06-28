@@ -293,6 +293,7 @@ class CGenerator (CodeCollector):
 			print 'double %s;' % var_name(addr)
 		print 'double output[%d];' % (self.port_max+1)
 		print 'machine_inputs_t inputs;'
+		print 'int num_timesteps_executed;'
 		print '} machine_state_t;'
 
 		print 'void compare_inputs (machine_inputs_t *old, machine_inputs_t *new, compare_init_func_t init, set_new_value_func_t set, gpointer user_data) {'
@@ -315,6 +316,7 @@ class CGenerator (CodeCollector):
 		for input in self.inputs:
 			print 'state->inputs.input_%d = 0.0;' % input
 		print 'for (int i = 0; i < %d; ++i) state->output[i] = 0.0;' % (self.port_max+1)
+		print 'state->num_timesteps_executed = 0;'
 		print '}'
 
 	def gen_loop(self):
@@ -355,6 +357,7 @@ class CGenerator (CodeCollector):
 			#if op[0] != 'noop' and op[0] != 'cmpz' and op[0] != 'output':
 			#print 'printf("%s = %%f\\n", %s);' % (var_name(addr), var_name(addr))
 			addr += 1
+		print '++state->num_timesteps_executed;'
 		print '}'
 
 	def finish(self):

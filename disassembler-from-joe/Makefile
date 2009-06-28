@@ -12,7 +12,7 @@ runner2 : runner.c bin2.c
 	gcc -o runner2 -DBIN2 -g -Wall -std=c99 runner.c -lm `pkg-config --cflags --libs glib-2.0`
 
 runner3 : runner.c bin3.c
-	gcc -o runner3 -DBIN3 -g -Wall -std=c99 runner.c -lm `pkg-config --cflags --libs glib-2.0`
+	gcc -o runner3 -DBIN3 -O3 -Wall -std=c99 runner.c -lm `pkg-config --cflags --libs glib-2.0`
 
 runner4 : runner.c bin4.c
 	gcc -o runner4 -DBIN4 -g -Wall -std=c99 runner.c -lm `pkg-config --cflags --libs glib-2.0`
