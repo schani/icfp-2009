@@ -7,6 +7,9 @@
 #ifdef	SEARCH_MAIN
 #define DIV_GRID	6
 #define DIV_BEST	3
+#else
+#define DIV_GRID	5
+#define DIV_BEST	4
 #endif
 
 

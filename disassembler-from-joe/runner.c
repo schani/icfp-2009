@@ -6,6 +6,8 @@
 #include <string.h>
 #include <stdlib.h>
 
+#include "search.h"
+
 #define MAX_TIMESTEPS		3000000
 #define WINNING_RADIUS		1000.0
 #define WINNING_TIMESTEPS	900
@@ -255,6 +257,7 @@ do_timestep (machine_state_t *state)
 	global_timestep();
     else
 	timestep(state);
+    //g_print("ts %d score %f\n", state->num_timesteps_executed, state->output[0]);
 }
 
 static vector_t
@@ -970,6 +973,34 @@ constant_skip_size_func (machine_state_t *state, gpointer user_data)
     return *(int*)user_data;
 }
 
+#if defined(BIN2) || defined(BIN3)
+static double
+bertl_search_score_func (void *user_data, int *coords)
+{
+    machine_state_t *state = user_data;
+    machine_state_t copy = *state;
+    double divisor = coords[0];
+    int step_size = coords[1];
+    double score;
+
+    score = do_follower_and_finish(&copy, get_meet_greet_sat_pos,
+				   constant_fuel_divisor_func, &divisor,
+				   constant_skip_size_func, &step_size,
+				   is_meet_greet_terminated, NULL,
+				   FALSE);
+
+    return score;
+}
+
+static void
+do_bertl_search (machine_state_t *state)
+{
+    int area[2][2] = { { 10, 1 }, { 100, 100 } };
+
+    search_area_int(bertl_search_score_func, state, area, 5);
+}
+#endif
+
 static void
 run_trace_file (FILE *file, machine_state_t *state)
 {
@@ -1177,6 +1208,7 @@ main (int argc, char *argv[])
     clear_dump_orbit();
 #else
 
+#if 0
     static double divisors[] = { 10.0, 20.0, 30.0, 50.0, 75.0, 100.0, 200.0, 500.0,
 				 1000.0, 2000.0, 5000.0, 10000.0, 0.0 };
     static int skips[] = { 1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 75, 100, 200, 300, 500,
@@ -1230,6 +1262,9 @@ main (int argc, char *argv[])
 			       TRUE);
 	g_print("best score %f with divisor %f and skip %d\n", best_score, best_divisor, best_skip);
     }
+#else
+    do_bertl_search(&global_state);
+#endif
 
 #endif
 #elif defined(BIN4)
@@ -1247,8 +1282,10 @@ main (int argc, char *argv[])
 
     g_print("score is %f\n", global_state.output[0]);
 
-    if (global_trace != NULL) //no odea if this is needed at all ;)
+    if (global_trace != NULL) {
+	//do_n_timesteps(&global_state, 100);
 	write_count(&global_state, 0, global_trace);
+    }
 
     if (global_trace != NULL)
 	fclose(global_trace);
