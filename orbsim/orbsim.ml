@@ -26,6 +26,7 @@ let rgb_blue =    0.0, 0.0, 1.0
 let rgb_yellow =  1.0, 1.0, 0.0
 let rgb_cyan =    0.0, 1.0, 1.0
 let rgb_magenta = 1.0, 0.0, 1.0
+let rgb_gray =    0.1, 0.1, 0.1
 let rgb_black =   0.0, 0.0, 0.0
 
 let our_x = ref 0.0
@@ -339,9 +340,9 @@ let make_orbit_window () =
       let da_width, da_height = Gdk.Drawable.get_size (da#misc#window)
       in let pixmap = GDraw.pixmap ~width:da_width ~height:da_height ()
       in
-	resize_screen spasc;
+	resize_screen spasc da_width da_height;
 	ignore (w#connect#destroy GMain.quit);
-	pixmap#set_foreground (`NAME "black");
+	pixmap#set_foreground (`NAME "darkgray");
 	pixmap#rectangle ~x:0 ~y:0 ~width:da_width ~height:da_height
 	  ~filled:true ();
 	let surface = (surface_from_gdk_pixmap pixmap#pixmap)
@@ -365,7 +366,8 @@ let make_orbit_window () =
     in let remove_timeout = ref (fun () -> ())
     in let rec timeout_handler () =
 	if !playing then begin
-	  let stamp, score, fuel, x, y, orbits, sats, moons, rem =
+	  let stamp, score, fuel, x, y,
+	    orbits, sats, moons, fusts, debugs, rem =
 	    q.Vmbridge.step spasc.speed;
 	  in let rec record_more_traces ?(i=0) = function
 		[] -> ()
