@@ -65,17 +65,26 @@ let absolute_time_to_start ichx1 ichy1 ichx2 ichy2 siex1 siey1 siex2 siey2
   let v_b = 
     get_speed (get_winkel siex1 siey1) (get_winkel siex2 siey2) in
   let t_h = get_th (radius  ichx1 ichy1) (radius siex1 siey1) in
-  (* let res = (beta_t -. alpha_t -. pi +. (v_b *. t_h)) /. (v_a
-     -. v_b) *)
+  (* let res = (beta_t -. alpha_t -. pi +. (v_b *. t_h)) /. (v_a -. v_b) *)
   let beta_th = w(beta_t +. (v_b *. t_h)) in
   let alpha_th = w(alpha_t +. pi) in
   let delta_th = (beta_th -. alpha_th) in
   let res = delta_th /. (v_a -. v_b) in
-  let res = if res >= 0. then res else (delta_th-.2.*.pi) /. (v_a -. v_b)
+  let res = 
+    if v_a > v_b then
+      if res >= 0. then 
+	res 
+      else 
+	(delta_th-.2.*.pi) /. (v_a -. v_b)
+    else
+      if res < 0. then 
+	res 
+      else 
+	(delta_th-.2.*.pi) /. (v_a -. v_b)
   in
   Printf.printf "abs_time_to_start: %f %f at %f bt %f va %f vb %f ath %f bth %f dth %f\n" 
     res t_h alpha_t beta_t v_a v_b alpha_th beta_th delta_th; 
-  res
+  abs_float res
 
 
 let inve f = 0.0 -. f;;

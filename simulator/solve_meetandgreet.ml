@@ -80,6 +80,10 @@ let run_hohmann dst m =
 
 let square x = x*.x
 
+let vecdiff (x1,y1) (x2,y2) = 
+  (x2-x1,y1,y2)
+
+
 let length (x,y) = 
   let xx = square x in
   let yy = square y in
@@ -109,7 +113,7 @@ let aktuator =
 	  pos1 := (posx,posy);
 	  tpos1 := (targetx,targety)
 	);
-      Printf.fprintf stderr "distance to dst: %f %d\n" (length !tpos1) m.timestep;
+      Printf.fprintf stderr "distance %d to dst: %f %f\n" m.timestep (length !tpos1) (length !pos1); 
       ()
     end;
 
