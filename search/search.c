@@ -7,11 +7,6 @@
 #ifdef	SEARCH_MAIN
 #define DIV_GRID	6
 #define DIV_BEST	3
-#else
-#define DIV_GRID	5
-#define DIV_BEST	4
-#endif
-
 
 double	calc_score(void *userdata, double *value)
 {
@@ -23,28 +18,68 @@ double	calc_score_int(void *userdata, int *value)
 	return sin(value[0]/100.0)*cos(value[1]/100.0)+1.0;
 }
 
+#else
+#define DIV_GRID	5
+#define DIV_BEST	4
+#endif
 
 
+static
+void	save_best(double score, double point[2],
+	double best_score[DIV_BEST], double best_point[DIV_BEST][2])
+{
+	for (int n=0; n<DIV_BEST; n++) {
+	    if (best_score[n] < score) {
+		for (int m=n+1; m<DIV_BEST; m++) {
+		    best_score[m] = best_score[m-1];
+		    best_point[m][0] = best_point[m-1][0];
+		    best_point[m][1] = best_point[m-1][1];
+		}
+		best_score[n] = score;
+		best_point[n][0] = point[0];
+		best_point[n][1] = point[1];
+		break;
+	    }
+	}
+}
 
+static
+void	save_best_int(double score, int point[2],
+	double best_score[DIV_BEST], double best_point[DIV_BEST][2])
+{
+	for (int n=0; n<DIV_BEST; n++) {
+	    if (best_score[n] < score) {
+		for (int m=n+1; m<DIV_BEST; m++) {
+		    best_score[m] = best_score[m-1];
+		    best_point[m][0] = best_point[m-1][0];
+		    best_point[m][1] = best_point[m-1][1];
+		}
+		best_score[n] = score;
+		best_point[n][0] = point[0];
+		best_point[n][1] = point[1];
+		break;
+	    }
+	}
+}
+
+static
 double	clamp(double val, double a, double b)
 {
 	return (val > b) ? b : ((val < a) ? a : val);
 }
 
 
-
-void	search_area(double (*score_f)(void *, double *),
-	void *user, double area[2][2], int depth)
+double	search_area(double (*score_f)(void *, double *),
+	void *user, double area[2][2], int depth, double *res)
 {
 	double best_score[DIV_BEST] = {0};
 	double best_point[DIV_BEST][2];
 	
 	double div[2] = { (area[1][0] - area[0][0])/DIV_GRID,
 			  (area[1][1] - area[0][1])/DIV_GRID };
-	
+
 	// printf("division is [%f,%f]\n", div[0], div[1]);
-		
-	
+
 	for (int i=0; i<DIV_GRID; i++) {
 	    for (int j=0; j<DIV_GRID; j++) {
 		double point[2] = { area[0][0] + (0.5 + i)*div[0],
@@ -54,19 +89,7 @@ void	search_area(double (*score_f)(void *, double *),
 		printf("@[%f,%f] = %f [%d]\n",
 			point[0], point[1], score, depth);
 
-		for (int n=0; n<DIV_BEST; n++) {
-		    if (best_score[n] < score) {
-			for (int m=n+1; m<DIV_BEST; m++) {
-			    best_score[m] = best_score[m-1];
-			    best_point[m][0] = best_point[m-1][0];
-			    best_point[m][1] = best_point[m-1][1];
-			}
-			best_score[n] = score;
-			best_point[n][0] = point[0];
-			best_point[n][1] = point[1];
-			break;
-		    }
-		}
+		save_best(score, point, best_score, best_point);
 	    }
 	}
 
@@ -92,19 +115,27 @@ void	search_area(double (*score_f)(void *, double *),
 			new_area[0][0], new_area[0][1],
 			new_area[1][0], new_area[1][1]);
 
-		search_area(score_f, user, new_area, depth - 1);			
+		double point[2];
+		double score = search_area(score_f, user,
+			new_area, depth - 1, point);
+
+		save_best(score, point, best_score, best_point);
 	    }
 	}
+
+	res[0] = best_point[0][0];
+	res[1] = best_point[0][1];
+	return best_score[0];
 }
 
 
 
-void	search_area_int(double (*score_f)(void *, int *),
-	void *user, int area[2][2], int depth)
+double	search_area_int(double (*score_f)(void *, int *),
+	void *user, int area[2][2], int depth, int *res)
 {
 	double best_score[DIV_BEST] = {0};
 	double best_point[DIV_BEST][2];
-	
+
 	double div[2] = { (area[1][0] - area[0][0])*1.0/DIV_GRID,
 			  (area[1][1] - area[0][1])*1.0/DIV_GRID };
 
@@ -119,26 +150,14 @@ void	search_area_int(double (*score_f)(void *, int *),
 	    for (double j=area[0][1] + div[1]/2.0; j<area[1][1]; j+=div[1]) {
 		int point[2] = { i, j };
 		double score = (*score_f)(user, point);
-		
+
 		printf("@[%d,%d] = %f [%d]\n",
 			point[0], point[1], score, depth);
 
-		for (int n=0; n<DIV_BEST; n++) {
-		    if (best_score[n] < score) {
-			for (int m=n+1; m<DIV_BEST; m++) {
-			    best_score[m] = best_score[m-1];
-			    best_point[m][0] = best_point[m-1][0];
-			    best_point[m][1] = best_point[m-1][1];
-			}
-			best_score[n] = score;
-			best_point[n][0] = point[0];
-			best_point[n][1] = point[1];
-			break;
-		    }
-		}
+		save_best_int(score, point, best_score, best_point);
 	    }
 	}
-	
+
 	for (int n=0; n<DIV_BEST; n++) {
 	    if (best_score[n] <= 0.0)
 		break;
@@ -169,22 +188,35 @@ void	search_area_int(double (*score_f)(void *, int *),
 			new_area[0][0], new_area[0][1],
 			new_area[1][0], new_area[1][1]);
 
-		search_area_int(score_f, user, new_area, depth - 1);
+		int point[2];
+		double score = search_area_int(score_f, user,
+			new_area, depth - 1, point);
+
+		save_best_int(score, point, best_score, best_point);
 	    }
 	}
+
+	res[0] = best_point[0][0];
+	res[1] = best_point[0][1];
+	return best_score[0];
 }
-	
-	
+
+
 #ifdef	SEARCH_MAIN
-	
+
 int	main(int argc, char *argv[])
 {
 	double start_area[2][2] = {{0, 0}, {4, 4}};
 	int start_area_int[2][2] = {{0, 0}, {50, 30}};
 
-	search_area(&calc_score, NULL, start_area, 4);
-	search_area_int(&calc_score_int, NULL, start_area_int, 4);
-	
+	double point[2];
+	double score = search_area(&calc_score, NULL, start_area, 4, point);
+	printf("score=%f point=[%f,%f]\n", score, point[0], point[1]);
+
+	int point_int[2];
+	double score_int = search_area_int(&calc_score_int, NULL, start_area_int, 4, point_int);
+	printf("score=%f point=[%d,%d]\n", score_int, point_int[0], point_int[1]);
+
 	exit(0);
 
 }
