@@ -17,8 +17,8 @@ let moon_r =  1738000.0 (* mycrometer genau! *)
 let initial_zoom = 200.0
 let initial_speed = 10
 let initial_fps = 25
-let initial_window_width = 700
-let initial_window_height = 700
+let initial_window_width = 800
+let initial_window_height = 800
 let pi = atan 1. *. 4.0
 let two_pi = pi *. 2.0
 let border = 1000.0
@@ -54,7 +54,7 @@ let limit_x2 = ref (earth_r *. 2.0)
 let limit_y2 = ref (earth_r *. 2.0)
 
 let show_sat_nr = ref true
-
+let do_goto = ref None
 
 type tracker = TR_None | TR_OurSat | TR_Sat of int
 
@@ -399,16 +399,18 @@ let make_orbit_window () =
     ignore (speeder#connect#value_changed
 	      (fun () ->
 		 spasc.speed <- int_of_float speeder#value));
-    ignore (GEdit.spin_button ~adjustment:zoomer ~rate:0. ~digits:5 ~width:100
+    ignore (GEdit.spin_button ~adjustment:zoomer ~rate:0. ~digits:2 ~width:75
 	      ~packing:hbox1#pack ());
     ignore (GMisc.label ~text:"Speed:" ~packing:(hbox1#pack ~expand:false) ());
-    ignore (GEdit.spin_button ~adjustment:speeder ~rate:0. ~digits:3 ~width:100
+    ignore (GEdit.spin_button ~adjustment:speeder ~rate:0. ~digits:1 ~width:60
 	      ~packing:hbox1#pack ());
     ignore (GMisc.label ~text:"FPS:" ~packing:(hbox1#pack ~expand:false) ());
     ignore (GEdit.spin_button ~adjustment:framer ~rate:0. ~digits:1 ~width:50
 	      ~packing:hbox1#pack ());
     let resetview_button =
       GButton.button ~label:"Reset View" ~packing:hbox1#pack ()
+    in let deltraces_button =
+	GButton.button ~label:"Reset Traces" ~packing:hbox1#pack ()
     in let _ = GMisc.label ~text:"Track:" ~packing:(hbox1#pack ~expand:false) ()
     in let trackoptmenu =
 	GMenu.option_menu ~packing:(hbox1#pack ~expand:false) ()
@@ -417,6 +419,9 @@ let make_orbit_window () =
 	let item = GMenu.menu_item ~label ~packing:trackmenu#append () in
 	  ignore (item#connect#activate ~callback)
     in let sat_nr_toggler = GButton.check_button ~label:"Sat #" ~active:true
+	~packing:(hbox1#pack ~expand:false) ()
+    in let _ = GMisc.label ~text:"Goto:" ~packing:(hbox1#pack ~expand:false) ()
+    in let goto_box = GEdit.entry ~max_length:50
 	~packing:(hbox1#pack ~expand:false) ()
     in
       make_menu_item "Noting" (fun _ -> the_tracker := TR_None);
@@ -427,6 +432,15 @@ let make_orbit_window () =
       ignore (sat_nr_toggler#connect#toggled ~callback:
 		(fun () -> show_sat_nr := sat_nr_toggler#active));
       hbox3#pack ~expand:false !status_line#coerce;
+      ignore (goto_box#connect#activate
+		~callback:(fun () ->
+			     try
+			       do_goto := Some (int_of_string goto_box#text)
+			     with
+				 _ ->
+				   fprintf stderr "illegal goto line\n";
+				   flush stderr;
+				   do_goto := None));
       ignore (GMisc.label ~text:"" ~packing:(hbox3#pack ~expand:true) ());
       da#misc#realize ();
       let mousepos = GMisc.label ~text:"" ~packing:(hbox2#pack ~expand:false) ()
@@ -667,6 +681,12 @@ let make_orbit_window () =
 		   spasc.spaceview_y <- 0.0;
 		   zoomer#set_value initial_zoom;
 		   refresh_da da));
+      ignore (deltraces_button#connect#clicked ~callback:
+		(function () ->
+		   our_history := [];
+		   for i = 0 to 11 do
+		     our_sats_histories.(i) <- [];
+		 done;));
       let da_width, da_height = Gdk.Drawable.get_size (da#misc#window)
       in
 	resize_screen spasc da_width da_height;
