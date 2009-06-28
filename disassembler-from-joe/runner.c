@@ -2,6 +2,10 @@
 #include <math.h>
 #include <stdio.h>
 
+#define MAX_TIMESTEPS		3000000
+#define WINNING_RADIUS		1000.0
+#define WINNING_TIMESTEPS	900
+
 typedef struct
 {
     double x;
@@ -31,9 +35,11 @@ typedef void (*set_new_value_func_t) (guint32 addr, double new_value, gpointer u
 
 typedef vector_t (*get_pos_func_t) (machine_state_t *state);
 
+typedef double (*fuel_divisor_func_t) (machine_state_t *state, gpointer user_data);
+typedef int (*skip_size_func_t) (machine_state_t *state, gpointer user_data);
+
 FILE *dump_file = NULL;
 FILE *global_trace = NULL;
-int global_iter;
 machine_state_t global_state;
 machine_inputs_t global_old_inputs;
 double dump_orbit = -1;
@@ -54,9 +60,9 @@ open_trace_file (char *filename, guint32 team_id, guint32 scenario)
 }
 
 static void
-write_count (guint32 count, FILE *f)
+write_count (machine_state_t *state, guint32 count, FILE *f)
 {
-    fwrite(&global_iter, 4, 1, f);
+    fwrite(&state->num_timesteps_executed, 4, 1, f);
     fwrite(&count, 4, 1, f);
 }
 
@@ -65,7 +71,7 @@ write_count_func (guint32 count, gpointer user_data)
 {
     FILE *f = user_data;
     if (count > 0)
-	write_count(count, f);
+	write_count(&global_state, count, f);
 }
 
 static void
@@ -127,7 +133,8 @@ print_timestep (machine_state_t *state)
     double sy = -state->output[3];
 
     if (dump_file != NULL)
-	fprintf(dump_file, "%d %f %f %f %f 1 0 0 %f %f\n", global_iter, state->output[0], state->output[1],
+	fprintf(dump_file, "%d %f %f %f %f 1 0 0 %f %f\n", state->num_timesteps_executed,
+		state->output[0], state->output[1],
 		sx, sy, state->output[4], sqrt(sx * sx + sy * sy));
 }
 #elif defined(BIN2) || defined(BIN3)
@@ -141,7 +148,8 @@ print_timestep (machine_state_t *state)
     double dy = state->output[5];
 
     if (dump_file != NULL) {
-	fprintf(dump_file, "%d %f %f %f %f %d 1 0 ", global_iter, state->output[0], state->output[1],
+	fprintf(dump_file, "%d %f %f %f %f %d 1 0 ", state->num_timesteps_executed,
+		state->output[0], state->output[1],
 		sx, sy, dump_orbit <= 0.0 ? 0 : 1);
 	if (dump_orbit > 0.0)
 	    fprintf(dump_file, "%f ", dump_orbit);
@@ -183,7 +191,7 @@ print_timestep (machine_state_t *state)
 
     
     if (dump_file != NULL) {
-        fprintf(dump_file, "%d %f %f %f %f 0 %d 1 1 0 ", global_iter, state->output[0], state->output[1],
+        fprintf(dump_file, "%d %f %f %f %f 0 %d 1 1 0 ", state->num_timesteps_executed, state->output[0], state->output[1],
                 sx, sy, max_sat);
 	for (int i=0; i<max_sat; ++i){
 		double dx = state->output[3*i+7];
@@ -215,7 +223,6 @@ global_timestep (void)
     write_timestep(global_trace, &global_old_inputs, &global_state.inputs);
     global_old_inputs = global_state.inputs;
     timestep(&global_state);
-    ++global_iter;
     print_timestep(&global_state);
 }
 
@@ -834,6 +841,85 @@ inject_bielliptical_to_circular (machine_state_t *state, double dest_apogee, dou
     g_assert_not_reached();
 }
 
+#if defined(BIN2) || defined(BIN3)
+static gboolean
+is_winning_state (machine_state_t *state)
+{
+    machine_state_t copy = *state;
+    int i;
+
+    g_assert(v_abs(v_sub(get_pos(&copy), get_meet_greet_sat_pos(&copy))) <= WINNING_RADIUS);
+
+    for (i = 0; i < WINNING_TIMESTEPS; ++i) {
+	do_timestep(&copy);
+	if (v_abs(v_sub(get_pos(&copy), get_meet_greet_sat_pos(&copy))) > WINNING_RADIUS)
+	    return FALSE;
+    }
+    return TRUE;
+}
+
+static double
+do_follower (machine_state_t *state, get_pos_func_t get_pos_func,
+	     fuel_divisor_func_t fuel_divisor_func, gpointer fuel_divisor_data,
+	     skip_size_func_t skip_size_func, gpointer skip_size_data,
+	     gboolean print)
+{
+    while (state->num_timesteps_executed < MAX_TIMESTEPS && state->output[0] == 0.0) {
+	vector_t our_pos = get_pos(state);
+	vector_t sat_pos = get_pos_func(state);
+	vector_t our_speed = get_speed(state);
+	vector_t sat_speed = get_speed_generic(state, get_pos_func);
+	vector_t pos_diff = v_sub(sat_pos, our_pos);
+
+	if (v_abs(pos_diff) < WINNING_RADIUS && is_winning_state(state))
+	    break;
+
+	if (v_abs(pos_diff) > 1.0) {
+	    vector_t speed_diff = v_sub(sat_speed, our_speed);
+	    int skip_size = skip_size_func(state, skip_size_data);
+	    double fuel_divisor = fuel_divisor_func(state, fuel_divisor_data);
+	    vector_t scaled_v = v_add(speed_diff, v_mul_scal(v_norm(v_sub(sat_pos, our_pos)),
+							     MIN(v_abs(pos_diff),
+								 state->output[1]) / fuel_divisor));
+
+	    if (print) {
+		g_print("distance %f   fuel %f   our speed (%f) ",
+			v_abs(pos_diff), state->output[1], v_abs(our_speed));
+		print_vec(our_speed);
+		g_print("   sat speed (%f) ", v_abs(sat_speed));
+		print_vec(sat_speed);
+		g_print("   speed (%f) ", v_abs(scaled_v));
+		print_vec(scaled_v);
+		g_print("\n");
+	    }
+
+	    set_thrust(state, scaled_v);
+
+	    do_n_timesteps(state, skip_size);
+	} else {
+	    do_n_timesteps(state, 1);
+	}
+    }
+
+    while (state->num_timesteps_executed < MAX_TIMESTEPS && state->output[0] == 0.0)
+	do_n_timesteps(state, 1);
+
+    return state->output[0];
+}
+
+static double
+constant_fuel_divisor_func (machine_state_t *state, gpointer user_data)
+{
+    return *(double*)user_data;
+}
+
+static int
+constant_skip_size_func (machine_state_t *state, gpointer user_data)
+{
+    return *(int*)user_data;
+}
+#endif
+
 int
 main (int argc, char *argv[])
 {
@@ -848,7 +934,6 @@ main (int argc, char *argv[])
 
     init_machine(&global_state);
     global_old_inputs = global_state.inputs;
-    global_iter = 0;
 
     global_state.inputs.input_16000 = SCENARIO;
 
@@ -861,7 +946,7 @@ main (int argc, char *argv[])
 
 #if 1
     do_n_timesteps(&global_state, num_iters);
-    inject_elliptical_to_circular(&global_state, 1.0, dest_apogee, 900, 1.0);
+    inject_elliptical_to_circular(&global_state, 1.0, dest_apogee, WINNING_TIMESTEPS, 1.0);
 #else
     // thrust more
     set_thrust(&global_state, v_mul_scal(get_thrust(&global_state), 1.25));
@@ -877,18 +962,18 @@ main (int argc, char *argv[])
 	set_thrust(&global_state, v_zero);
     }
 
-    inject_elliptical_to_circular(&global_state, -1.0, dest_apogee, 900, 1.0);
+    inject_elliptical_to_circular(&global_state, -1.0, dest_apogee, WINNING_TIMESTEPS, 1.0);
 
     /*
-    for (i = 0; i < 900; ++i) {
+    for (i = 0; i < WINNING_TIMESTEPS; ++i) {
 	global_timestep();
 	set_thrust(&global_state, v_zero);
     }
     */
 #endif
-#elif defined(BIN2)
-    g_assert_not_reached();
-#elif defined(BIN3)
+    //#elif defined(BIN2)
+    //    g_assert_not_reached();
+#elif defined(BIN2) || defined(BIN3)
 
 #if 0
     vector_t our_apogee, our_perigee;
@@ -939,7 +1024,7 @@ main (int argc, char *argv[])
     do_n_timesteps(&global_state, num_iters);
 
     inject_elliptical_to_circular(&global_state, c_dist < v_abs(sat_perigee) ? 1.0 : -1.0,
-				  v_abs(sat_perigee), 900, 1.0);
+				  v_abs(sat_perigee), WINNING_TIMESTEPS, 1.0);
 
     timestep_until_angle(&global_state, v_angle(sat_perigee), v_abs(sat_perigee) * 1.01, &have_angle);
 
@@ -948,47 +1033,56 @@ main (int argc, char *argv[])
     clear_dump_orbit();
 #else
 
+    static double divisors[] = { 10.0, 20.0, 30.0, 50.0, 75.0, 100.0, 200.0, 500.0,
+				 1000.0, 2000.0, 5000.0, 10000.0, 0.0 };
+    static int skips[] = { 1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 75, 100, 200, 300, 500,
+			   1000, 2000, 3000, 5000, 10000, 0 };
+
+    double best_score = -1;
+    double best_divisor = 0.0;
+    int best_skip = 1;
+    int j;
+
     /*
-    set_thrust(&global_state, v_make(-2000.0, 0.0));
-    do_n_timesteps(&global_state, 1);
+    for (i = 0; skips[i] > 0; ++i)
+	g_print(";%d", skips[i]);
+    g_print("\n");
     */
 
-    for (int i = 0; i < 10000; ++i) {
-	vector_t our_pos = get_pos(&global_state);
-	vector_t sat_pos = get_meet_greet_sat_pos(&global_state);
-	vector_t our_speed = get_speed(&global_state);
-	vector_t sat_speed = get_speed_generic(&global_state, get_meet_greet_sat_pos);
-	vector_t pos_diff = v_sub(sat_pos, our_pos);
+    for (i = 0; divisors[i] > 0; ++i) {
+	double divisor = divisors[i];
 
-	if (v_abs(pos_diff) > 1.0) {
-	    vector_t speed_diff = v_sub(sat_speed, our_speed);
-	    vector_t scaled_v = v_add(speed_diff, v_mul_scal(v_norm(v_sub(sat_pos, our_pos)),
-							     MIN(v_abs(pos_diff), global_state.output[1]) / 50.0));
+	//g_print("%f", divisor);
 
-	    /*
-	      vector_t direct_v = v_add(v_add(v_mul_scal(our_speed, -1.0),
-	      v_sub(sat_pos, our_pos)),
-	      sat_speed);
-	      vector_t scaled_v = v_mul_scal(v_norm(direct_v), global_state.output[1] / 1000.0);
-	    */
+	for (j = 0; skips[j] != 0; ++j) {
+	    int skip = skips[j];
+	    double score;
+	    machine_state_t copy = global_state;
 
-	    g_print("%d distance %f   fuel %f   our speed (%f) ",
-		    i, v_abs(pos_diff), global_state.output[1], v_abs(our_speed));
-	    print_vec(our_speed);
-	    g_print("   sat speed (%f) ", v_abs(sat_speed));
-	    print_vec(sat_speed);
-	    g_print("   speed (%f) ", v_abs(scaled_v));
-	    print_vec(scaled_v);
-	    g_print("\n");
+	    g_print("trying follower with divisor %f skip %d\n", divisor, skip);
+	    score = do_follower(&copy, get_meet_greet_sat_pos,
+				constant_fuel_divisor_func, &divisor,
+				constant_skip_size_func, &skip,
+				FALSE);
+	    //g_print(";%f", score);
+	    g_print("score is %f\n", score);
 
-	    set_thrust(&global_state, scaled_v);
-
-	    do_n_timesteps(&global_state, 50);
-	    /*
-	} else {
-	    do_n_timesteps(&global_state, 1);
-	    */
+	    if (score > best_score) {
+		best_score = score;
+		best_divisor = divisor;
+		best_skip = skip;
+	    }
 	}
+
+	g_print("\n");
+    }
+
+    if (best_score > 0) {
+	do_follower(&global_state, get_meet_greet_sat_pos,
+		    constant_fuel_divisor_func, &best_divisor,
+		    constant_skip_size_func, &best_skip,
+		    TRUE);
+	g_print("best score %f with divisor %f and skip %d\n", best_score, best_divisor, best_skip);
     }
 
 #endif
@@ -998,14 +1092,14 @@ main (int argc, char *argv[])
 #error bla
 #endif
 
-    while (global_iter < 3000000 && global_state.output[0] == 0.0) {
+    while (global_state.num_timesteps_executed < 3000000 && global_state.output[0] == 0.0) {
 	global_timestep();
 	set_thrust(&global_state, v_zero);
     }
 
     g_print("score is %f\n", global_state.output[0]);
 
-    write_count(0, global_trace);
+    write_count(&global_state, 0, global_trace);
 
     if (global_trace != NULL)
 	fclose(global_trace);
