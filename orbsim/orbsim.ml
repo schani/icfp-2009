@@ -174,12 +174,12 @@ let show_orbit ?(color=rgb_yellow) surface spasc r =
 let show_orbits ?(color=rgb_yellow) surface spasc rs =
   List.iter (fun r -> show_orbit ~color surface spasc r) rs
 
-let show_sat ?(color=rgb_red) surface spasc x y =
+let show_sat ?(r=3.0) ?(color=rgb_white) surface spasc x y =
   set_color surface color;
-  paint_circle surface (ccx spasc x) (ccy spasc y) 3.0
+  paint_circle surface (ccx spasc x) (ccy spasc y) r
 
 let show_sats ?(color=rgb_red) surface spasc sats =
-  List.iter (fun (x, y) -> show_sat ~color surface spasc x y) sats
+  List.iter (fun (x, y) -> show_sat  ~r:4.5 ~color surface spasc x y) sats
 
 let show_earth surface spasc =
   set_color surface rgb_green;
