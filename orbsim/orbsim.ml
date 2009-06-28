@@ -14,7 +14,7 @@ let diewoed = Cairo_png.image_surface_create_from_file "/tmp/erde.png"
 
 let earth_r = 6357000.0
 let moon_r =  1738000.0 (* mycrometer genau! *)
-let initial_zoom = 1234.0
+let initial_zoom = 200.0
 let initial_speed = 10
 let initial_fps = 25
 let pi = atan 1. *. 4.0
@@ -380,7 +380,7 @@ let make_orbit_window () =
   in
     ignore (zoomer#connect#value_changed
 	      (fun () ->
-		 spasc.zoom <- zoomer#value *. earth_r /. 100.0;
+		 spasc.zoom <- zoomer#value *. earth_r /. 10.0;
 		 recalculate_spaceview spasc;
 		 update_scollers ();
 		 refresh_da da));
@@ -601,18 +601,10 @@ let make_orbit_window () =
        and scroll_callback ev =
 	match GdkEvent.get_type ev with
 	  | `SCROLL ->
-	      if GdkEvent.Scroll.direction ev = `UP then begin
-		if zoomer#value <= 20.0 then
-		  zoomer#set_value (zoomer#value +. 3.0)
-		else
-		  zoomer#set_value (zoomer#value +. 20.0);
-	      end;
-	      if GdkEvent.Scroll.direction ev = `DOWN then begin
-		if zoomer#value <= 20.0 then 
-		  zoomer#set_value (zoomer#value -. 3.0)
-		else
-		  zoomer#set_value (zoomer#value -. 20.0);
-	      end;
+	      if GdkEvent.Scroll.direction ev = `UP then
+		zoomer#set_value (zoomer#value *. 2.0);
+	      if GdkEvent.Scroll.direction ev = `DOWN then
+		  zoomer#set_value (zoomer#value /. 2.0);
 	      true
     in
       ignore (da#event#connect#expose ~callback:redraw_all);
