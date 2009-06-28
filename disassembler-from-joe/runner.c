@@ -967,8 +967,8 @@ main (int argc, char *argv[])
 	      vector_t scaled_v = v_mul_scal(v_norm(direct_v), global_state.output[1] / 1000.0);
 	    */
 
-	    g_print("distance %f   fuel %f   our speed (%f) ",
-		    v_abs(pos_diff), global_state.output[1], v_abs(our_speed));
+	    g_print("%d distance %f   fuel %f   our speed (%f) ",
+		    i, v_abs(pos_diff), global_state.output[1], v_abs(our_speed));
 	    print_vec(our_speed);
 	    g_print("   sat speed (%f) ", v_abs(sat_speed));
 	    print_vec(sat_speed);
