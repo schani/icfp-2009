@@ -860,18 +860,17 @@ inject_bielliptical_to_circular (machine_state_t *state, double dest_apogee, dou
     g_assert_not_reached();
 }
 
-#if defined(BIN2) || defined(BIN3)
 static gboolean
-is_winning_state (machine_state_t *state)
+is_winning_state (machine_state_t *state, get_pos_func_t get_pos_func)
 {
     machine_state_t copy = *state;
     int i;
 
-    g_assert(v_abs(v_sub(get_pos(&copy), get_meet_greet_sat_pos(&copy))) <= WINNING_RADIUS);
+    g_assert(v_abs(v_sub(get_pos(&copy), get_pos_func(&copy))) <= WINNING_RADIUS);
 
     for (i = 0; i < WINNING_TIMESTEPS; ++i) {
 	do_timestep(&copy);
-	if (v_abs(v_sub(get_pos(&copy), get_meet_greet_sat_pos(&copy))) > WINNING_RADIUS)
+	if (v_abs(v_sub(get_pos(&copy), get_pos_func(&copy))) > WINNING_RADIUS)
 	    return FALSE;
     }
     return TRUE;
@@ -890,7 +889,7 @@ do_follower (machine_state_t *state, get_pos_func_t get_pos_func,
 	vector_t sat_speed = get_speed_generic(state, get_pos_func);
 	vector_t pos_diff = v_sub(sat_pos, our_pos);
 
-	if (v_abs(pos_diff) < WINNING_RADIUS && is_winning_state(state))
+	if (v_abs(pos_diff) < WINNING_RADIUS && is_winning_state(state, get_pos_func))
 	    break;
 
 	if (v_abs(pos_diff) > 1.0) {
@@ -937,7 +936,6 @@ constant_skip_size_func (machine_state_t *state, gpointer user_data)
 {
     return *(int*)user_data;
 }
-#endif
 
 static void
 run_trace_file (FILE *file, machine_state_t *state)
