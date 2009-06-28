@@ -73,7 +73,7 @@ let alloc_machine problem memsize =
     instruction_pointer = -1;
     input_ports =  Array.make 0x4 0.;
     old_input_ports = Array.make 0x4 0.;
-    output_ports = Array.make (0x9 + 3*11) 0.;
+    output_ports = Array.make 0x66 0.;
     timestep = 0;
     config = 0.;
   }
@@ -118,6 +118,7 @@ let read_port m = function
     m.input_ports.(port)
 
 let write_port m port data = 
+  (* Printf.printf "writing [%d] port %d := %08.8f\n" m.timestep port data;*)
   m.output_ports.(port) <- data;
   m
 
@@ -191,14 +192,49 @@ let execute_one_instruction m =
 let write_actuator m portno data = 
   m.input_ports.(portno) <- data;
   m
-    (* {m with input_ports = IntMap.add portno data m.input_ports} *)
 
 let vm_write_actuator m portid data = 
   write_actuator m (input_port_number portid) data
 
+let vm_write_thrust m (x,y)  = 
+  let m = vm_write_actuator m DeltaX x in
+  let m = vm_write_actuator m DeltaY y in
+  m
+
 let vm_read_sensor m port =
     m.output_ports.(port)  
+
+let vm_read_ourpos m = 
+  (m.output_ports.(2), m.output_ports.(3))
+
+let vm_read_fuel m = 
+  m.output_ports.(1)
+
+let vm_read_moon m = 
+  (m.output_ports.(0x64),m.output_ports.(0x65))
+
+let vm_read_fueling m = 
+  (m.output_ports.(0x4),m.output_ports.(0x5))
+
+let vm_read_sat_pos m num = 
+  match m.problem with 
+    | MeetAndGreet | Eccentric -> 
+	(m.output_ports.(4), m.output_ports.(5))
+    | ClearSky -> 
+	(m.output_ports.(3*num+0x7), m.output_ports.(3*num+0x8))
+    | _ -> failwith "there is not sat"
     
+let vm_read_sat_killed m num = 
+  match m.problem with 
+    | ClearSky -> 
+	m.output_ports.(3*num+0x9) = 1.
+    | _ -> 
+	false
+	
+let vm_read_score m = 
+  m.output_ports.(0)
+    
+
 let vm_init_machine problem = 
   let ic = Basic_reader.open_obf (get_file_for_problem problem) in 
   let m = alloc_machine problem (Basic_reader.get_size ic) in
@@ -228,7 +264,6 @@ let vm_configure m config =
 	
 (* this executes "one simulation step, i.e., 1 sec "*)
 let vm_execute_one_step m = 
-  (* let m = {m with datamem = Array.copy m.datamem} in *)
   let rec loop m = 
     let m = execute_one_instruction m in
     if is_instruction m then
@@ -238,6 +273,15 @@ let vm_execute_one_step m =
   in
   let m = loop m in
   {m with timestep = m.timestep + 1; instruction_pointer = -1; }
+
+let vm_execute_n_steps n m = 
+  let rec loop i m = 
+    if i > 0 then
+      loop (i-1) (vm_execute_one_step m)
+    else
+      m
+  in
+  loop n m
 
 let vm_is_done m = 
   (* score written || 3M timesteps  -> eog *)
