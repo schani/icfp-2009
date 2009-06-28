@@ -894,7 +894,7 @@ is_meet_greet_terminated (machine_state_t *state, get_pos_func_t get_pos_func, g
     return is_winning_state(state, get_pos_func);
 }
 
-static double
+static int
 do_follower (machine_state_t *state, get_pos_func_t get_pos_func,
 	     fuel_divisor_func_t fuel_divisor_func, gpointer fuel_divisor_data,
 	     skip_size_func_t skip_size_func, gpointer skip_size_data,
@@ -935,11 +935,28 @@ do_follower (machine_state_t *state, get_pos_func_t get_pos_func,
 	}
     }
 
+    return state->num_timesteps_executed;
+}
+
+static double
+do_follower_and_finish (machine_state_t *state, get_pos_func_t get_pos_func,
+			fuel_divisor_func_t fuel_divisor_func, gpointer fuel_divisor_data,
+			skip_size_func_t skip_size_func, gpointer skip_size_data,
+			termination_condition_func_t termination_condition_func, gpointer termination_condition_data,
+			gboolean print)
+{
+    do_follower(state, get_pos_func,
+		fuel_divisor_func, fuel_divisor_data,
+		skip_size_func, skip_size_data,
+		termination_condition_func, termination_condition_data,
+		print);
+
     while (state->num_timesteps_executed < MAX_TIMESTEPS && state->output[0] == 0.0)
 	do_n_timesteps(state, 1);
 
     return state->output[0];
 }
+
 
 static double
 constant_fuel_divisor_func (machine_state_t *state, gpointer user_data)
@@ -1187,11 +1204,11 @@ main (int argc, char *argv[])
 	    machine_state_t copy = global_state;
 
 	    g_print("trying follower with divisor %f skip %d\n", divisor, skip);
-	    score = do_follower(&copy, get_meet_greet_sat_pos,
-				constant_fuel_divisor_func, &divisor,
-				constant_skip_size_func, &skip,
-				is_meet_greet_terminated, NULL,
-				FALSE);
+	    score = do_follower_and_finish(&copy, get_meet_greet_sat_pos,
+					   constant_fuel_divisor_func, &divisor,
+					   constant_skip_size_func, &skip,
+					   is_meet_greet_terminated, NULL,
+					   FALSE);
 	    //g_print(";%f", score);
 	    g_print("score is %f\n", score);
 
@@ -1206,16 +1223,18 @@ main (int argc, char *argv[])
     }
 
     if (best_score > 0) {
-	do_follower(&global_state, get_meet_greet_sat_pos,
-		    constant_fuel_divisor_func, &best_divisor,
-		    constant_skip_size_func, &best_skip,
-		    is_meet_greet_terminated, NULL,
-		    TRUE);
+	do_follower_and_finish(&global_state, get_meet_greet_sat_pos,
+			       constant_fuel_divisor_func, &best_divisor,
+			       constant_skip_size_func, &best_skip,
+			       is_meet_greet_terminated, NULL,
+			       TRUE);
 	g_print("best score %f with divisor %f and skip %d\n", best_score, best_divisor, best_skip);
     }
 
 #endif
 #elif defined(BIN4)
+    
+
     /* nix */
 #else
 #error bla
