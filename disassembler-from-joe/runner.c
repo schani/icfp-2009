@@ -109,10 +109,15 @@ clear_dump_orbit (void)
 
 /* Format of dump file:
  *
- * <time> <score> <fuel> <our-x> <our-y> <number-or-orbits> <number-of-satellites> <number-of-moons>
+ * <time> <score> <fuel> <our-x> <our-y>
+ *     <number-or-orbits> <number-of-satellites> <number-of-moons>
+ *     <number-of-fueling-stations> <number-of-debug-points>
+ *
  * <orbit-0> <orbit-1> ... <orbit-n-1>
  * <sat-0-x> <sat-0-y> <sat-1-x> <sat-1-y> ... <sat-m-1-x> <sat-m-1-y>
  * <moon-0-x> <moon-0-y> <moon-1-x> <moon-1-y> ... <moon-k-1-x> <moon-k-1-y>
+ * <fuel-0-x> <fuel-0-y> <fuel-1-x> <fuel-1-y> ... <fuel-l-1-x> <fuel-l-1-y>
+ * <point-0-x> <point-0-y> <point-1-x> <point-1-y> ... <point-l-1-x> <point-l-1-y>
  */
 #if defined(BIN1)
 static void
