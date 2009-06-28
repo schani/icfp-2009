@@ -104,6 +104,13 @@ clear_dump_orbit (void)
     dump_orbit = -1;
 }
 
+/* Format of dump file:
+ *
+ * <time> <score> <fuel> <our-x> <our-y> <number-or-orbits> <number-of-satellites> <number-of-moons>
+ * <orbit-0> <orbit-1> ... <orbit-n-1>
+ * <sat-0-x> <sat-0-y> <sat-1-x> <sat-1-y> ... <sat-m-1-x> <sat-m-1-y>
+ * <moon-0-x> <moon-0-y> <moon-1-x> <moon-1-y> ... <moon-k-1-x> <moon-k-1-y>
+ */
 #if defined(BIN1)
 static void
 print_timestep (machine_state_t *state)
@@ -127,7 +134,7 @@ print_timestep (machine_state_t *state)
 
     if (dump_file != NULL) {
 	fprintf(dump_file, "%d %f %f %f %f %d 1 0 ", global_iter, state->output[0], state->output[1],
-		dump_orbit <= 0.0 ? 0 : 1, sx, sy);
+		sx, sy, dump_orbit <= 0.0 ? 0 : 1);
 	if (dump_orbit > 0.0)
 	    fprintf(dump_file, "%f ", dump_orbit);
 	fprintf(dump_file, "%f %f %f\n", sx + dx, sy + dy, sqrt(sx * sx + sy * sy));
@@ -218,8 +225,6 @@ static double
 v_angle (vector_t v)
 {
     double angle = atan2(v.y, v.x);
-    if (angle < 0.0)
-	angle += 2.0 * G_PI;
     return angle;
 }
 
@@ -237,6 +242,12 @@ static double
 a_delta (double a1, double a2)
 {
     return a_norm(a2-a1);
+}
+
+static double
+a_sign (double angle)
+{
+    return (angle >= 0) ? 1.0 : -1.0;
 }
 
 static void
@@ -269,6 +280,47 @@ v_rotate (vector_t v, double angle)
     return new;
 }
 
+
+/* MATH STUFF */
+
+#define	SIM_G	6.67428e-11
+#define SIM_M	6.0e+24
+#define SIM_R	6.357e+6
+
+#define SIM_mu	(SIM_G*SIM_M)
+
+static double
+m_period(double semi_major)
+{
+    return 2.0*G_PI * sqrt((semi_major * semi_major * semi_major) / SIM_mu);
+}
+
+static double
+m_focal_dist(double apoapsis, double periapsis)
+{
+    return apoapsis - periapsis;
+}
+
+static double
+m_major(double apoapsis, double periapsis)
+{
+    return apoapsis + periapsis;
+}
+
+static double
+m_semi_major(double apoapsis, double periapsis)
+{
+    return m_major(apoapsis, periapsis)/2.0;
+}
+
+static double
+m_eccentricity(double apoapsis, double periapsis)
+{
+    return m_focal_dist(apoapsis, periapsis) / m_major(apoapsis, periapsis);
+}
+
+
+
 static vector_t
 get_norm_speed (machine_state_t *state)
 {
@@ -281,9 +333,9 @@ get_norm_speed (machine_state_t *state)
     new = get_pos(&copy);
 
     {
-	double a1 = atan2(old.y, old.x);
-	double a2 = atan2(new.y, new.x);
-	double da = a_norm(a2-a1);
+	double a1 = v_angle(old);
+	double a2 = v_angle(new);
+	double da = a_delta(a1, a2);
 
 	vector_t veld = v_sub(new, old);
 	vector_t velc;
@@ -334,70 +386,88 @@ do_n_timesteps (machine_state_t *state, int num_iters)
     }
 }
 
-static double
-calc_apogee (machine_state_t *state, vector_t thrust, double max_dist, int *num_iters)
+static gboolean
+between_angles (double angle, double a1, double a2, double max_diff)
 {
-    machine_state_t copy = *state;
+    g_assert(angle >= -G_PI && angle <= G_PI);
+    g_assert(a1 >= -G_PI && a1 <= G_PI);
+    g_assert(a2 >= -G_PI && a2 <= G_PI);
+
+    if (fabs(a1 - a2) > max_diff) {
+	if (a1 < a2)
+	    return angle <= a1 || angle >= a2;
+	else
+	    return angle <= a2 || angle >= a1;
+    }
+
+    if (a1 < a2)
+	return angle >= a1 && angle <= a2;
+    else
+	return angle >= a2 && angle <= a1;
+}
+
+static int
+timestep_until_angle (machine_state_t *state, double dest_angle, double max_dist, gboolean *have_angle)
+{
+    double old_angle = get_angle(state);
     int i = 0;
 
-    set_thrust(&copy, thrust);
-
     for (;;) {
-	double old_dist;
-	double new_dist;
-
-	old_dist = distance_from_earth(&copy);
-	timestep(&copy);
-	new_dist = distance_from_earth(&copy);
-	set_thrust(&copy, v_zero);
-
-	if (new_dist >= max_dist) {
-	    if (num_iters != NULL)
-		*num_iters = i;
-	    return max_dist;
-	}
-
-	if (new_dist <= old_dist) {
-	    if (num_iters != NULL)
-		*num_iters = i;
-	    return old_dist;
-	}
-
+	do_timestep(state);
+	set_thrust(state, v_zero);
 	++i;
+
+	if (distance_from_earth(state) >= max_dist) {
+	    if (have_angle != NULL)
+		*have_angle = FALSE;
+	    return i;
+	}
+
+	double new_angle = get_angle(state);
+
+	//g_print("%d %f %f %f %f\n", i, old_angle, new_angle, dest_angle, distance_from_earth(&copy));
+
+	if (between_angles(dest_angle, old_angle, new_angle, 0.2)) {
+	    g_print("at angle %f (dest angle %f) - dist %f\n", new_angle, dest_angle, distance_from_earth(state));
+	    if (have_angle != NULL)
+		*have_angle = TRUE;
+	    return i;
+	}
+
+	old_angle = new_angle;
     }
+
+    g_assert_not_reached();
+}
+
+static int
+timestep_until_angle_delta (machine_state_t *state, double angle_delta, double max_dist, gboolean *have_angle)
+{
+    double dest_angle = get_angle(state) + angle_delta;
+
+    g_assert(angle_delta >= 0.0);
+
+    if (dest_angle > G_PI)
+	dest_angle -= 2.0 * G_PI;
+
+    return timestep_until_angle(state, dest_angle, max_dist, have_angle);
 }
 
 static double
-calc_perigee (machine_state_t *state, vector_t thrust, double max_dist, int *num_iters)
+calc_apogee_or_perigee (machine_state_t *state, vector_t thrust, double max_dist, int *num_iters)
 {
     machine_state_t copy = *state;
-    int i = 0;
+    gboolean have_angle;
+    int i;
 
     set_thrust(&copy, thrust);
 
-    for (;;) {
-	double old_dist;
-	double new_dist;
-
-	old_dist = distance_from_earth(&copy);
-	timestep(&copy);
-	new_dist = distance_from_earth(&copy);
-	set_thrust(&copy, v_zero);
-
-	if (new_dist >= max_dist) {
-	    if (num_iters != NULL)
-		*num_iters = i;
-	    return max_dist;
-	}
-
-	if (new_dist >= old_dist) {
-	    if (num_iters != NULL)
-		*num_iters = i;
-	    return old_dist;
-	}
-
-	++i;
-    }
+    i = timestep_until_angle_delta(&copy, G_PI, max_dist, &have_angle);
+    if (num_iters != NULL)
+	*num_iters = i;
+    if (!have_angle)
+	return max_dist;
+    return distance_from_earth(&copy);
 }
 
 static void
@@ -447,6 +517,71 @@ calc_ellipse (machine_state_t *state, vector_t *apogee, vector_t *perigee, int *
     }
 }
 
+
+static void
+calc_ellipse_bertl(machine_state_t *state, vector_t *apogee, vector_t *perigee,
+		int *t_to_apogee, int *t_to_perigee,
+		get_pos_func_t get_pos_func)
+{
+    machine_state_t copy = *state;
+
+    vector_t pos = get_pos_func(&copy);
+    double dist = v_abs(pos);
+
+    double start_angle = v_angle(pos);
+    double sign_delta = a_sign(0);
+    double sign_last = sign_delta;
+    int sign_flip = 0;
+    int iter = 0;
+
+    double min_dist = dist;
+    double max_dist = dist;
+    vector_t min_pos = pos;
+    vector_t max_pos = pos;
+    int min_iter = iter;
+    int max_iter = iter;
+
+    do {
+	double angle;
+
+	timestep(&copy);
+	iter++;
+
+	pos = get_pos_func(&copy);
+	dist = v_abs(pos);
+	angle = v_angle(pos);
+
+
+	if (dist < min_dist) {
+	    min_dist = dist;
+	    min_pos = pos;
+	    min_iter = iter;
+	}
+
+	if (dist > max_dist) {
+	    max_dist = dist;
+	    max_pos = pos;
+	    max_iter = iter;
+	}
+
+	sign_delta = a_sign(angle - start_angle);
+	if (sign_last != sign_delta) {
+	    sign_last = sign_delta;
+	    sign_flip++;
+	}
+    } while (sign_flip < 3);
+
+    if (apogee)
+	*apogee = max_pos;
+    if (perigee)
+	*perigee = min_pos;
+    if (t_to_apogee)
+	*t_to_apogee = max_iter;
+    if (t_to_perigee)
+	*t_to_perigee = min_iter;
+}
+
+
 static int
 inject_circular_to_elliptical (machine_state_t *state, double dest_apogee, double tolerance)
 {
@@ -481,10 +616,7 @@ inject_circular_to_elliptical (machine_state_t *state, double dest_apogee, doubl
 
 	double apogee;
 
-	if (sign > 0)
-	    apogee = calc_apogee(state, thrust, dest_apogee * 2.0, &num_iters);
-	else
-	    apogee = calc_perigee(state, thrust, dest_apogee * 2.0, &num_iters);
+	apogee = calc_apogee_or_perigee(state, thrust, dest_apogee * 2.0, &num_iters);
 
 	g_print("apogee is %f after %d iterations\n", apogee, num_iters);
 
@@ -580,66 +712,6 @@ inject_elliptical_to_circular (machine_state_t *state, double sign,
     g_assert_not_reached();
 }
 
-static gboolean
-between_angles (double angle, double a1, double a2, double max_diff)
-{
-    g_assert(angle >= 0 && angle <= 2.0 * G_PI);
-    g_assert(a1 >= 0 && a1 <= 2.0 * G_PI);
-    g_assert(a2 >= 0 && a2 <= 2.0 * G_PI);
-
-    if (fabs(a1 - a2) > max_diff) {
-	if (a1 < a2)
-	    return angle <= a1 || angle >= a2;
-	else
-	    return angle <= a2 || angle >= a1;
-    }
-
-    if (a1 < a2)
-	return angle >= a1 && angle <= a2;
-    else
-	return angle >= a2 && angle <= a1;
-}
-
-static int
-timestep_until_angle (machine_state_t *state, double angle, double max_dist, gboolean *have_angle)
-{
-    double start_angle = get_angle(state);
-    double dest_angle = start_angle + angle;
-    double old_angle = start_angle;
-    int i = 0;
-
-    g_assert(angle >= 0.0);
-    if (dest_angle > 2.0 * G_PI)
-	dest_angle -= 2.0 * G_PI;
-
-    for (;;) {
-	do_timestep(state);
-	set_thrust(state, v_zero);
-	++i;
-
-	if (distance_from_earth(state) >= max_dist) {
-	    if (have_angle != NULL)
-		*have_angle = FALSE;
-	    return i;
-	}
-
-	double new_angle = get_angle(state);
-
-	//g_print("%d %f %f %f %f\n", i, old_angle, new_angle, dest_angle, distance_from_earth(&copy));
-
-	if (between_angles(dest_angle, old_angle, new_angle, 0.2)) {
-	    g_print("at angle %f (dest angle %f) - dist %f\n", new_angle, dest_angle, distance_from_earth(state));
-	    if (have_angle != NULL)
-		*have_angle = TRUE;
-	    return i;
-	}
-
-	old_angle = new_angle;
-    }
-
-    g_assert_not_reached();
-}
-
 static double
 calc_distance_after_angle (machine_state_t *state, vector_t thrust, double angle, int *num_iters)
 {
@@ -649,7 +721,7 @@ calc_distance_after_angle (machine_state_t *state, vector_t thrust, double angle
 
     set_thrust(&copy, thrust);
 
-    i = timestep_until_angle(&copy, angle, max_dist, NULL);
+    i = timestep_until_angle_delta(&copy, angle, max_dist, NULL);
     if (num_iters != NULL)
 	*num_iters = i;
 
@@ -728,7 +800,7 @@ main (int argc, char *argv[])
 #else
     // thrust more
     set_thrust(&global_state, v_mul_scal(get_thrust(&global_state), 1.25));
-    timestep_until_angle(&global_state, G_PI, dest_apogee * 100.0, &have_angle);
+    timestep_until_angle_delta(&global_state, G_PI, dest_apogee * 100.0, &have_angle);
     if (!have_angle) {
 	g_print("don't have angle\n");
 	return 1;
@@ -758,30 +830,36 @@ main (int argc, char *argv[])
     int t_to_our_apogee, t_to_our_perigee;
     int t_to_sat_apogee, t_to_sat_perigee;
 
-    calc_ellipse(&global_state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos);
+    calc_ellipse_bertl(&global_state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos);
 
-    g_print("us: t to apogee: %d  perigee: %d\n", t_to_our_apogee, t_to_our_perigee);
+    g_print("s us: t to apogee: %d  perigee: %d\n", t_to_our_apogee, t_to_our_perigee);
     g_print("apogee (%f) ", v_angle(our_apogee) / G_PI * 180.0);
     print_vec(our_apogee);
     g_print("   perigee (%f) ", v_angle(our_perigee) / G_PI * 180.0);
     print_vec(our_perigee);
     g_print("\n\n");
 
-    calc_ellipse(&global_state, &sat_apogee, &sat_perigee, &t_to_sat_apogee, &t_to_sat_perigee, get_meet_greet_sat_pos);
+    g_print("(math) period : %f\n", m_period(v_abs(v_sub(our_apogee, our_perigee))/2));
+    g_print("(math) eccentricity : %f\n", m_eccentricity(v_abs(our_apogee), v_abs(our_perigee)));
 
-    g_print("sat: t to apogee: %d  perigee: %d\n", t_to_sat_apogee, t_to_sat_perigee);
+    calc_ellipse_bertl(&global_state, &sat_apogee, &sat_perigee, &t_to_sat_apogee, &t_to_sat_perigee, get_meet_greet_sat_pos);
+
+    g_print("s sat: t to apogee: %d  perigee: %d\n", t_to_sat_apogee, t_to_sat_perigee);
     g_print("apogee (%f) ", v_angle(sat_apogee) / G_PI * 180.0);
     print_vec(sat_apogee);
     g_print("   perigee (%f) ", v_angle(sat_perigee) / G_PI * 180.0);
     print_vec(sat_perigee);
     g_print("\n\n");
 
+    g_print("(math) period : %f\n", m_period(v_abs(v_sub(sat_apogee, sat_perigee))/2));
+    g_print("(math) eccentricity : %f\n", m_eccentricity(v_abs(sat_apogee), v_abs(sat_perigee)));
+
     set_dump_orbit(v_abs(sat_perigee));
 
     do_n_timesteps(&global_state, t_to_our_perigee);
 
     set_thrust(&global_state, v_mul_scal(get_norm_speed(&global_state), v_abs(get_speed(&global_state)) / 20.0));
-    timestep_until_angle(&global_state, G_PI, MAX(v_abs(our_apogee), v_abs(sat_apogee)) * 10.0, &have_angle);
+    timestep_until_angle_delta(&global_state, G_PI, MAX(v_abs(our_apogee), v_abs(sat_apogee)) * 10.0, &have_angle);
     if (!have_angle) {
 	g_print("don't have angle\n");
 	return 1;
@@ -797,9 +875,13 @@ main (int argc, char *argv[])
     inject_elliptical_to_circular(&global_state, c_dist < v_abs(sat_perigee) ? 1.0 : -1.0,
 				  v_abs(sat_perigee), 900, 1.0);
 
-    
+    timestep_until_angle(&global_state, v_angle(sat_perigee), v_abs(sat_perigee) * 1.01, &have_angle);
+
+    inject_circular_to_elliptical(&global_state, v_abs(sat_apogee), 1.0);
 
     clear_dump_orbit();
+#elif defined(BIN4)
+    /* nix */
 #else
 #error bla
 #endif
