@@ -169,7 +169,7 @@ print_timestep (machine_state_t *state)
     double dy = state->output[5];
 
     if (dump_file != NULL) {
-	fprintf(dump_file, "%d %f %f %f %f %d 1 0 ", state->num_timesteps_executed,
+	fprintf(dump_file, "%d %f %f %f %f %d 1 0 0 0 ", state->num_timesteps_executed,
 		state->output[0], state->output[1],
 		sx, sy, dump_orbit <= 0.0 ? 0 : 1);
 	if (dump_orbit > 0.0)
