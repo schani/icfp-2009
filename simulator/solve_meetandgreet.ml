@@ -143,7 +143,8 @@ let aktuator =
 	  | step when step > !strategy.second_thrust_time + 2 ->
 	      Kurden_approximator.follow m
 	  | _ ->
-	      (* Printf.printf "ALERT, maybe should not be reached\n";*)
+	      (* Printf.fprintf stderr "ALERT, maybe should not be
+		 reached %d\n" m.timestep; *)
 	      vm_write_thrust m (0.,0.)
 		
 
