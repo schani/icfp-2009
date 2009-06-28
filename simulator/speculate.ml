@@ -5,7 +5,11 @@ let do_nothing m =
     
   
 let lookahead m time func = 
-  let m' = {m with datamem = (Array.copy m.datamem)} in
+  let m' = {m with 
+    datamem = (Array.copy m.datamem); 
+    output_ports = (Array.copy m.output_ports);
+    input_ports = (Array.copy m.input_ports);
+  } in
   let rec loop i m = 
     if i = 0 then
       m

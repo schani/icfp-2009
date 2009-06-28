@@ -34,7 +34,7 @@ let _ =
     0
     (* Osf_simulator.simulate Sys.argv.(1)*)
   else
-    let problem = Vm.MeetAndGreet in
+    let problem = Vm.Hohmann in
     let configs = get_configs problem in
     let rec loop = function 
       | [] -> 0

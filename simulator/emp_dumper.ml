@@ -1,6 +1,9 @@
 open Vm
 
 
+let vec_len (x,y) = 
+  sqrt (x*.x+.y*.y)
+
 let vec_minus (x1,y1) (x2,y2) =
   ((x1 -. x2),(y1 -. y2))
 
@@ -67,6 +70,9 @@ let compose_comment m =
 	      loop (acc^(if vm_read_sat_killed m num then "1" else "0")) (num+1)
 	in
 	(loop "emptrace killed" 0)
+    | MeetAndGreet -> 
+	let dist = vec_len (vm_read_sat_pos m 0) in
+	("emptrace disttodst "^(string_of_float dist))
     | _ -> 
 	"emptrace"
 	

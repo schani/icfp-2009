@@ -33,14 +33,21 @@ let calc_next_pos pos prev =
   let gtvec = gt (vec_neg pos) in
   vec_add (vec_add pos (vec_minus pos prev)) (vec_scalar_mult 0.5 gtvec)
 
-let magic_schani_constants = 30,75.,1.
+let magic_schani_constants = 30,75.,500.
 
-let skip_step m time = 
+let do_steps m time = 
   Speculate.lookahead m time Emp_dumper.emp_dump_writer
 
+let zerothrust_steps m time = 
+  Speculate.lookahead m time (fun m -> 
+    ignore(Emp_dumper.emp_dump_writer m);
+    (Vm.vm_write_thrust m (0.,0.)))
+
+let min x y = 
+  if x < y then x else y
 
 (* follows for "one" step *)
-let follower_step m weprev heprev = 
+    let follower_step m weprev heprev = 
   match Speculate.do_we_win m with 
     | Some m -> 
 	m 
@@ -58,9 +65,11 @@ let follower_step m weprev heprev =
 	  ((Vm.vm_read_fuel m) /. fueldivisor)) henow) in
 	
 	if (vec_length henow) > mindist then 
-	  Speculate.skip_time (Vm.vm_write_thrust m thrust) skip_size
+	  let m = do_steps (Vm.vm_write_thrust m thrust) 1 in
+	  let m = zerothrust_steps m skip_size in
+	  m
 	else
-	  Speculate.skip_time m 1
+	  zerothrust_steps m 1
 	    
 let follow m = 
 let rec loop m = 
@@ -69,6 +78,6 @@ let rec loop m =
     if Vm.vm_is_done m then
       m 
     else
-      loop (follower_step (Speculate.skip_time m 1) pos his_pos)
+      loop (follower_step (zerothrust_steps m 1) pos his_pos)
   in
   loop m 
