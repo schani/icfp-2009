@@ -14,7 +14,7 @@ let diewoed = Cairo_png.image_surface_create_from_file "/tmp/erde.png"
 
 let earth_r = 6357000.0
 let moon_r =  1738000.0 (* mycrometer genau! *)
-let initial_zoom = 1234.0
+let initial_zoom = 200.0
 let initial_speed = 10
 let initial_fps = 25
 let pi = atan 1. *. 4.0
@@ -35,7 +35,7 @@ let rgb_orange =  1.0, 0.6, 0.0
 let our_x = ref 0.0
 let our_y = ref 0.0
 let our_orbits = ref []
-let our_sats = ref []
+let our_sats = ref [| 1.1, 1.2 |]
 let our_moons = ref []
 let our_massband = ref None
 let our_rectzoomer = ref None
@@ -177,6 +177,11 @@ let paint_rect surface x1 y1 x2 y2 =
   Cairo.rectangle surface x1 y1 (x2 -. x1) (y2 -. y1);
   Cairo.stroke surface
 
+let paint_text surface x y msg =
+  Cairo.move_to surface x y;
+  Cairo.show_text surface msg;
+  Cairo.stroke surface
+  
 let show_trace ?(color=rgb_cyan) surface spasc points =
   paint_trace ~color surface
     (List.map (fun (x,y) -> (ccx spasc x), (ccy spasc y)) points)
@@ -191,12 +196,19 @@ let show_orbit ?(color=rgb_yellow) surface spasc r =
 let show_orbits ?(color=rgb_yellow) surface spasc rs =
   List.iter (fun r -> show_orbit ~color surface spasc r) rs
 
-let show_sat ?(r=3.0) ?(color=rgb_white) surface spasc x y =
-  set_color surface color;
-  paint_circle surface (ccx spasc x) (ccy spasc y) r
+let show_sat ?i ?(r=3.0) ?(color=rgb_white) surface spasc x y =
+  let x, y = (ccx spasc x), (ccy spasc y)
+  in
+    set_color surface color;
+    paint_circle surface x y r;
+    match i with
+      | None -> ()
+      | Some i ->
+	  set_color surface rgb_white;
+	  paint_text surface (x +. r +. 2.0) (y +. r +. 8.0) (string_of_int i)
 
 let show_sats ?(color=rgb_red) surface spasc sats =
-  List.iter (fun (x, y) -> show_sat  ~r:4.5 ~color surface spasc x y) sats
+  Array.iteri (fun i (x, y) -> show_sat ~r:4.5 ~color ~i surface spasc x y) sats
 
 let show_fuelstation ?(r=3.5) ?(color=rgb_orange) surface spasc x y =
   set_color surface rgb_black;
@@ -368,7 +380,7 @@ let make_orbit_window () =
   in
     ignore (zoomer#connect#value_changed
 	      (fun () ->
-		 spasc.zoom <- zoomer#value *. earth_r /. 100.0;
+		 spasc.zoom <- zoomer#value *. earth_r /. 10.0;
 		 recalculate_spaceview spasc;
 		 update_scollers ();
 		 refresh_da da));
@@ -466,7 +478,7 @@ let make_orbit_window () =
 	    our_x := x;
 	    our_y := y;
 	    our_orbits := orbits;
-	    our_sats := sats;
+	    our_sats := Array.of_list sats;
 	    our_moons := moons;
 	    our_fuelstations := fusts;
 	    our_debugstations := debugs;
@@ -589,18 +601,10 @@ let make_orbit_window () =
        and scroll_callback ev =
 	match GdkEvent.get_type ev with
 	  | `SCROLL ->
-	      if GdkEvent.Scroll.direction ev = `UP then begin
-		if zoomer#value <= 20.0 then
-		  zoomer#set_value (zoomer#value +. 3.0)
-		else
-		  zoomer#set_value (zoomer#value +. 20.0);
-	      end;
-	      if GdkEvent.Scroll.direction ev = `DOWN then begin
-		if zoomer#value <= 20.0 then 
-		  zoomer#set_value (zoomer#value -. 3.0)
-		else
-		  zoomer#set_value (zoomer#value -. 20.0);
-	      end;
+	      if GdkEvent.Scroll.direction ev = `UP then
+		zoomer#set_value (zoomer#value *. 2.0);
+	      if GdkEvent.Scroll.direction ev = `DOWN then
+		  zoomer#set_value (zoomer#value /. 2.0);
 	      true
     in
       ignore (da#event#connect#expose ~callback:redraw_all);
