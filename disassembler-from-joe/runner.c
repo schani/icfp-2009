@@ -850,6 +850,51 @@ is_winning_state (machine_state_t *state)
     }
     return TRUE;
 }
+
+static double
+do_follower (machine_state_t *state, get_pos_func_t get_pos_func, double fuel_divisor, int num_skip_timesteps,
+	     gboolean print)
+{
+    while (state->output[0] == 0.0) {
+	vector_t our_pos = get_pos(state);
+	vector_t sat_pos = get_pos_func(state);
+	vector_t our_speed = get_speed(state);
+	vector_t sat_speed = get_speed_generic(state, get_pos_func);
+	vector_t pos_diff = v_sub(sat_pos, our_pos);
+
+	if (v_abs(pos_diff) < 1000.0 && is_winning_state(state))
+	    break;
+
+	if (v_abs(pos_diff) > 1.0) {
+	    vector_t speed_diff = v_sub(sat_speed, our_speed);
+	    vector_t scaled_v = v_add(speed_diff, v_mul_scal(v_norm(v_sub(sat_pos, our_pos)),
+							     MIN(v_abs(pos_diff),
+								 state->output[1]) / fuel_divisor));
+
+	    if (print) {
+		g_print("distance %f   fuel %f   our speed (%f) ",
+			v_abs(pos_diff), state->output[1], v_abs(our_speed));
+		print_vec(our_speed);
+		g_print("   sat speed (%f) ", v_abs(sat_speed));
+		print_vec(sat_speed);
+		g_print("   speed (%f) ", v_abs(scaled_v));
+		print_vec(scaled_v);
+		g_print("\n");
+	    }
+
+	    set_thrust(state, scaled_v);
+
+	    do_n_timesteps(state, num_skip_timesteps);
+	} else {
+	    do_n_timesteps(state, 1);
+	}
+    }
+
+    while (state->output[0] == 0.0)
+	do_n_timesteps(state, 1);
+
+    return state->output[0];
+}
 #endif
 
 int
@@ -966,41 +1011,50 @@ main (int argc, char *argv[])
     clear_dump_orbit();
 #else
 
+    static double divisors[] = { 10.0, 20.0, 30.0, 50.0, 75.0, 100.0, 200.0, 500.0,
+				 1000.0, 2000.0, 5000.0, 10000.0, 0.0 };
+    static int skips[] = { 1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 75, 100, 200, 300, 500,
+			   1000, 2000, 3000, 5000, 10000, 0 };
+
+    double best_score = -1;
+    double best_divisor = 0.0;
+    int best_skip = 1;
+    int j;
+
     /*
-    set_thrust(&global_state, v_make(-2000.0, 0.0));
-    do_n_timesteps(&global_state, 1);
+    for (i = 0; skips[i] > 0; ++i)
+	g_print(";%d", skips[i]);
+    g_print("\n");
     */
 
-    for (;;) {
-	vector_t our_pos = get_pos(&global_state);
-	vector_t sat_pos = get_meet_greet_sat_pos(&global_state);
-	vector_t our_speed = get_speed(&global_state);
-	vector_t sat_speed = get_speed_generic(&global_state, get_meet_greet_sat_pos);
-	vector_t pos_diff = v_sub(sat_pos, our_pos);
+    for (i = 0; divisors[i] > 0; ++i) {
+	double divisor = divisors[i];
 
-	if (v_abs(pos_diff) < 1000.0 && is_winning_state(&global_state))
-	    break;
+	g_print("%f", divisor);
 
-	if (v_abs(pos_diff) > 1.0) {
-	    vector_t speed_diff = v_sub(sat_speed, our_speed);
-	    vector_t scaled_v = v_add(speed_diff, v_mul_scal(v_norm(v_sub(sat_pos, our_pos)),
-							     MIN(v_abs(pos_diff), global_state.output[1]) / 50.0));
+	for (j = 0; skips[j] != 0; ++j) {
+	    int skip = skips[j];
+	    double score;
+	    machine_state_t copy = global_state;
 
-	    g_print("%d distance %f   fuel %f   our speed (%f) ",
-		    i, v_abs(pos_diff), global_state.output[1], v_abs(our_speed));
-	    print_vec(our_speed);
-	    g_print("   sat speed (%f) ", v_abs(sat_speed));
-	    print_vec(sat_speed);
-	    g_print("   speed (%f) ", v_abs(scaled_v));
-	    print_vec(scaled_v);
-	    g_print("\n");
+	    g_print("trying follower with divisor %f skip %d\n", divisor, skip);
+	    score = do_follower(&copy, get_meet_greet_sat_pos, divisor, skip, FALSE);
+	    //g_print(";%f", score);
+	    g_print("score is %f\n", score);
 
-	    set_thrust(&global_state, scaled_v);
-
-	    do_n_timesteps(&global_state, 50);
-	} else {
-	    do_n_timesteps(&global_state, 1);
+	    if (score > best_score) {
+		best_score = score;
+		best_divisor = divisor;
+		best_skip = skip;
+	    }
 	}
+
+	g_print("\n");
+    }
+
+    if (best_score > 0) {
+	do_follower(&global_state, get_meet_greet_sat_pos, best_divisor, best_skip, TRUE);
+	g_print("best score %f with divisor %f and skip %d\n", best_score, best_divisor, best_skip);
     }
 
 #endif
