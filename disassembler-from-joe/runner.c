@@ -2,6 +2,10 @@
 #include <math.h>
 #include <stdio.h>
 
+#define MAX_TIMESTEPS		3000000
+#define WINNING_RADIUS		1000.0
+#define WINNING_TIMESTEPS	900
+
 typedef struct
 {
     double x;
@@ -36,7 +40,6 @@ typedef int (*skip_size_func_t) (machine_state_t *state, gpointer user_data);
 
 FILE *dump_file = NULL;
 FILE *global_trace = NULL;
-int global_iter;
 machine_state_t global_state;
 machine_inputs_t global_old_inputs;
 double dump_orbit = -1;
@@ -57,9 +60,9 @@ open_trace_file (char *filename, guint32 team_id, guint32 scenario)
 }
 
 static void
-write_count (guint32 count, FILE *f)
+write_count (machine_state_t *state, guint32 count, FILE *f)
 {
-    fwrite(&global_iter, 4, 1, f);
+    fwrite(&state->num_timesteps_executed, 4, 1, f);
     fwrite(&count, 4, 1, f);
 }
 
@@ -68,7 +71,7 @@ write_count_func (guint32 count, gpointer user_data)
 {
     FILE *f = user_data;
     if (count > 0)
-	write_count(count, f);
+	write_count(&global_state, count, f);
 }
 
 static void
@@ -130,7 +133,8 @@ print_timestep (machine_state_t *state)
     double sy = -state->output[3];
 
     if (dump_file != NULL)
-	fprintf(dump_file, "%d %f %f %f %f 1 0 0 %f %f\n", global_iter, state->output[0], state->output[1],
+	fprintf(dump_file, "%d %f %f %f %f 1 0 0 %f %f\n", state->num_timesteps_executed,
+		state->output[0], state->output[1],
 		sx, sy, state->output[4], sqrt(sx * sx + sy * sy));
 }
 #elif defined(BIN2) || defined(BIN3)
@@ -144,7 +148,8 @@ print_timestep (machine_state_t *state)
     double dy = state->output[5];
 
     if (dump_file != NULL) {
-	fprintf(dump_file, "%d %f %f %f %f %d 1 0 ", global_iter, state->output[0], state->output[1],
+	fprintf(dump_file, "%d %f %f %f %f %d 1 0 ", state->num_timesteps_executed,
+		state->output[0], state->output[1],
 		sx, sy, dump_orbit <= 0.0 ? 0 : 1);
 	if (dump_orbit > 0.0)
 	    fprintf(dump_file, "%f ", dump_orbit);
@@ -186,7 +191,8 @@ print_timestep (machine_state_t *state)
 
     
     if (dump_file != NULL) {
-        fprintf(dump_file, "%d %f %f %f %f 0 %d 2 ", global_iter, state->output[0], state->output[1],
+        fprintf(dump_file, "%d %f %f %f %f 0 %d 2 ", state->num_timesteps_executed,
+		state->output[0], state->output[1],
                 sx, sy, max_sat);
 	for (int i=0; i<max_sat; ++i){
 		double dx = state->output[3*i+7];
@@ -218,7 +224,6 @@ global_timestep (void)
     write_timestep(global_trace, &global_old_inputs, &global_state.inputs);
     global_old_inputs = global_state.inputs;
     timestep(&global_state);
-    ++global_iter;
     print_timestep(&global_state);
 }
 
@@ -844,11 +849,11 @@ is_winning_state (machine_state_t *state)
     machine_state_t copy = *state;
     int i;
 
-    g_assert(v_abs(v_sub(get_pos(&copy), get_meet_greet_sat_pos(&copy))) <= 1000.0);
+    g_assert(v_abs(v_sub(get_pos(&copy), get_meet_greet_sat_pos(&copy))) <= WINNING_RADIUS);
 
-    for (i = 0; i < 900; ++i) {
+    for (i = 0; i < WINNING_TIMESTEPS; ++i) {
 	do_timestep(&copy);
-	if (v_abs(v_sub(get_pos(&copy), get_meet_greet_sat_pos(&copy))) > 1000.0)
+	if (v_abs(v_sub(get_pos(&copy), get_meet_greet_sat_pos(&copy))) > WINNING_RADIUS)
 	    return FALSE;
     }
     return TRUE;
@@ -860,14 +865,14 @@ do_follower (machine_state_t *state, get_pos_func_t get_pos_func,
 	     skip_size_func_t skip_size_func, gpointer skip_size_data,
 	     gboolean print)
 {
-    while (state->output[0] == 0.0) {
+    while (state->num_timesteps_executed < MAX_TIMESTEPS && state->output[0] == 0.0) {
 	vector_t our_pos = get_pos(state);
 	vector_t sat_pos = get_pos_func(state);
 	vector_t our_speed = get_speed(state);
 	vector_t sat_speed = get_speed_generic(state, get_pos_func);
 	vector_t pos_diff = v_sub(sat_pos, our_pos);
 
-	if (v_abs(pos_diff) < 1000.0 && is_winning_state(state))
+	if (v_abs(pos_diff) < WINNING_RADIUS && is_winning_state(state))
 	    break;
 
 	if (v_abs(pos_diff) > 1.0) {
@@ -897,7 +902,7 @@ do_follower (machine_state_t *state, get_pos_func_t get_pos_func,
 	}
     }
 
-    while (state->output[0] == 0.0)
+    while (state->num_timesteps_executed < MAX_TIMESTEPS && state->output[0] == 0.0)
 	do_n_timesteps(state, 1);
 
     return state->output[0];
@@ -930,7 +935,6 @@ main (int argc, char *argv[])
 
     init_machine(&global_state);
     global_old_inputs = global_state.inputs;
-    global_iter = 0;
 
     global_state.inputs.input_16000 = SCENARIO;
 
@@ -943,7 +947,7 @@ main (int argc, char *argv[])
 
 #if 1
     do_n_timesteps(&global_state, num_iters);
-    inject_elliptical_to_circular(&global_state, 1.0, dest_apogee, 900, 1.0);
+    inject_elliptical_to_circular(&global_state, 1.0, dest_apogee, WINNING_TIMESTEPS, 1.0);
 #else
     // thrust more
     set_thrust(&global_state, v_mul_scal(get_thrust(&global_state), 1.25));
@@ -959,10 +963,10 @@ main (int argc, char *argv[])
 	set_thrust(&global_state, v_zero);
     }
 
-    inject_elliptical_to_circular(&global_state, -1.0, dest_apogee, 900, 1.0);
+    inject_elliptical_to_circular(&global_state, -1.0, dest_apogee, WINNING_TIMESTEPS, 1.0);
 
     /*
-    for (i = 0; i < 900; ++i) {
+    for (i = 0; i < WINNING_TIMESTEPS; ++i) {
 	global_timestep();
 	set_thrust(&global_state, v_zero);
     }
@@ -1021,7 +1025,7 @@ main (int argc, char *argv[])
     do_n_timesteps(&global_state, num_iters);
 
     inject_elliptical_to_circular(&global_state, c_dist < v_abs(sat_perigee) ? 1.0 : -1.0,
-				  v_abs(sat_perigee), 900, 1.0);
+				  v_abs(sat_perigee), WINNING_TIMESTEPS, 1.0);
 
     timestep_until_angle(&global_state, v_angle(sat_perigee), v_abs(sat_perigee) * 1.01, &have_angle);
 
@@ -1089,14 +1093,14 @@ main (int argc, char *argv[])
 #error bla
 #endif
 
-    while (global_iter < 3000000 && global_state.output[0] == 0.0) {
+    while (global_state.num_timesteps_executed < 3000000 && global_state.output[0] == 0.0) {
 	global_timestep();
 	set_thrust(&global_state, v_zero);
     }
 
     g_print("score is %f\n", global_state.output[0]);
 
-    write_count(0, global_trace);
+    write_count(&global_state, 0, global_trace);
 
     if (global_trace != NULL)
 	fclose(global_trace);
