@@ -38,6 +38,8 @@ typedef vector_t (*get_pos_func_t) (machine_state_t *state);
 
 typedef double (*fuel_divisor_func_t) (machine_state_t *state, gpointer user_data);
 typedef int (*skip_size_func_t) (machine_state_t *state, gpointer user_data);
+typedef gboolean (*termination_condition_func_t) (machine_state_t *state, get_pos_func_t get_pos_func,
+						  gpointer user_data);
 
 FILE *dump_file = NULL;
 FILE *global_trace = NULL;
@@ -867,7 +869,8 @@ is_winning_state (machine_state_t *state, get_pos_func_t get_pos_func)
     machine_state_t copy = *state;
     int i;
 
-    g_assert(v_abs(v_sub(get_pos(&copy), get_pos_func(&copy))) <= WINNING_RADIUS);
+    if (v_abs(v_sub(get_pos(&copy), get_pos_func(&copy))) > WINNING_RADIUS)
+	return FALSE;
 
     for (i = 0; i < WINNING_TIMESTEPS; ++i) {
 	do_timestep(&copy);
@@ -877,21 +880,33 @@ is_winning_state (machine_state_t *state, get_pos_func_t get_pos_func)
     return TRUE;
 }
 
+static gboolean
+is_meet_greet_terminated (machine_state_t *state, get_pos_func_t get_pos_func, gpointer user_data)
+{
+    vector_t our_pos = get_pos(state);
+    vector_t sat_pos = get_pos_func(state);
+    vector_t pos_diff = v_sub(sat_pos, our_pos);
+
+    if (state->num_timesteps_executed >= MAX_TIMESTEPS)
+	return TRUE;
+    if (state->output[0] != 0.0)
+	return TRUE;
+    return is_winning_state(state, get_pos_func);
+}
+
 static double
 do_follower (machine_state_t *state, get_pos_func_t get_pos_func,
 	     fuel_divisor_func_t fuel_divisor_func, gpointer fuel_divisor_data,
 	     skip_size_func_t skip_size_func, gpointer skip_size_data,
+	     termination_condition_func_t termination_condition_func, gpointer termination_condition_data,
 	     gboolean print)
 {
-    while (state->num_timesteps_executed < MAX_TIMESTEPS && state->output[0] == 0.0) {
+    while (!termination_condition_func(state, get_pos_func, termination_condition_data)) {
 	vector_t our_pos = get_pos(state);
 	vector_t sat_pos = get_pos_func(state);
 	vector_t our_speed = get_speed(state);
 	vector_t sat_speed = get_speed_generic(state, get_pos_func);
 	vector_t pos_diff = v_sub(sat_pos, our_pos);
-
-	if (v_abs(pos_diff) < WINNING_RADIUS && is_winning_state(state, get_pos_func))
-	    break;
 
 	if (v_abs(pos_diff) > 1.0) {
 	    vector_t speed_diff = v_sub(sat_speed, our_speed);
@@ -1175,6 +1190,7 @@ main (int argc, char *argv[])
 	    score = do_follower(&copy, get_meet_greet_sat_pos,
 				constant_fuel_divisor_func, &divisor,
 				constant_skip_size_func, &skip,
+				is_meet_greet_terminated, NULL,
 				FALSE);
 	    //g_print(";%f", score);
 	    g_print("score is %f\n", score);
@@ -1193,6 +1209,7 @@ main (int argc, char *argv[])
 	do_follower(&global_state, get_meet_greet_sat_pos,
 		    constant_fuel_divisor_func, &best_divisor,
 		    constant_skip_size_func, &best_skip,
+		    is_meet_greet_terminated, NULL,
 		    TRUE);
 	g_print("best score %f with divisor %f and skip %d\n", best_score, best_divisor, best_skip);
     }
