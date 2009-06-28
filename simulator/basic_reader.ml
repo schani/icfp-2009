@@ -35,7 +35,5 @@ let basic_read_memory_line (ic,i) =
       (data,insn)
   in
   (data,insn),(ic,i)
-      
-      
-    
+       
 
