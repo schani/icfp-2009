@@ -35,6 +35,7 @@ type machine_state =
       config: float;
       osf_writer: machine_state -> machine_state;
       osf_closer: machine_state -> machine_state;
+      quitter:machine_state -> machine_state;
     }
 
 let check_config problem = function
@@ -80,6 +81,7 @@ let alloc_machine problem memsize =
     config = 0.;
     osf_writer = (fun m -> m);
     osf_closer = (fun m -> m);
+    quitter = (fun m -> m);
   }
 
 let exchange_inputs m = 
@@ -258,12 +260,11 @@ let vm_init_machine problem =
     | End_of_file -> 
 	m
 
-let vm_configure m config = 
+let vm_configure m config quite = 
   let m = vm_write_actuator m DeltaX 0E0 in
   let m = vm_write_actuator m DeltaY 0E0 in
   if check_config m.problem config then 
-    
-    {m with config = (float_of_int config)}
+    {m with config = (float_of_int config); quitter = quite}
   else
     failwith "bad config"
 
@@ -292,8 +293,8 @@ let vm_execute_n_steps n m =
 let vm_is_done m = 
   let ret =   (((vm_read_sensor m 0) <> 0.) || (m.timestep = 3000000)) in
   (* score written || 3M timesteps  -> eog *)
-  (* if ret then
-     Printf.fprintf stderr "we have reached the end of the world @ %d %f\n" m.timestep (vm_read_score m);*)
+  if ret then
+     Printf.fprintf stderr "we have reached the end of the world @ %d %f\n" m.timestep (vm_read_score m);
   ret
   
 
