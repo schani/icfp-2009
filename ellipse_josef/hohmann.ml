@@ -125,14 +125,21 @@ let to_our x = (0.0 -. x);;
 *)
 
 let hohmann sx1 sy1 sx2 sy2 zielradius =
-  let rich = richtung  (to_our sx1) (to_our sy1) (to_our sx2) (to_our
-    sy2) in
+  let rich = richtung  (to_our sx1) (to_our sy1) (to_our sx2) (to_our sy2) in
   (
     (erster_schub  (to_our sx2) (to_our sy2) zielradius rich),
     (zweiter_schub  (to_our sx2) (to_our sy2) zielradius rich),
     (zeitbedarf (to_our sx2) (to_our sy2) zielradius),
 (zweiterpunkt (to_our sx2) (to_our sy2) zielradius)
 );;
+
+let hohmann_thrust1 (sx1,sy1) (sx2,sy2) ziel = 
+  let rich = richtung  (to_our sx1) (to_our sy1) (to_our sx2) (to_our sy2) in
+  (erster_schub  (to_our sx2) (to_our sy2) ziel rich)
+
+let hohmann_thrust2 (sx1,sy1) (sx2,sy2) ziel = 
+  let rich = richtung  (to_our sx1) (to_our sy1) (to_our sx2) (to_our sy2) in
+  (zweiter_schub  (to_our sx2) (to_our sy2) ziel rich)
 
 
 (* hohmann (-6556995.342903) 7814.930000 (-6556981.371618) 15629.848899 *)
@@ -224,63 +231,3 @@ let time_to_start wex1 wey1 wex2 wey2 oex1 oey1 oex2 oey2 =
   abs (int_of_float (winkel_to_wait /. (winkel_minus ourspeed zielspeed)));;
 
 
- 
-(* 
-time_to_start
-  (-6556995.342903) (7814.932739)
-  (-6556981.371618) (15629.854376)
-  (1800001.790116) (892.59737999)
-  (1800007.160459) (1785.18840850);;
-
- winkel_if_shot
-  (-6556995.342903) (7814.932739)
-  (-6556981.371618) (15629.854376)
-  (1800001.790116) (892.59737999)
-  (1800007.160459) (1785.18840850);;
-
- 
-
- winkel_if_shot
-   (-7875.21543324) (-6456995.19753615)
-   (-15750.41915192) (-6456980.79015176)
-   (-7875.21543324) (-6456995.19753615)
-   (-15750.41915192) (-6456980.79015176);;
-
-
- to_our (-7875.21543324) ;;
-   to_our (-6456995.19753615);;
-   to_our (-15750.41915192) ;;
-   to_our (-6456980.79015176);;
-
-speed 
-   (to_absolute (-7875.21543324) (-952.88007471))
-   (  to_absolute (-6456995.19753615) (1900001.93548247))
-   (  to_absolute (-15750.41915192) (-1905.75318447))
-   (  to_absolute (-6456980.79015176) (1900007.74192468));;
-
-speed
- ( to_our (-7875.21543324) )
- (  to_our (-6456995.19753615))
- (  to_our (-15750.41915192))
- (  to_our (-6456980.79015176));;
-
-
-   to_absolute (-7875.21543324) (-952.88007471);;
-     to_absolute (-6456995.19753615) (1900001.93548247);;
-     to_absolute (-15750.41915192) (-1905.75318447);;
-     to_absolute (-6456980.79015176) (1900007.74192468);;
-*)
-
-(* to_absolute (-6556995.342903) (1800001.790116)  ;; *)
-(*  to_absolute (7814.932739) (892.59737999)  ;; *)
-
-(*  to_absolute (-6556981.371618) (1800007.160459)  ;; *)
-(*  to_absolute (15629.854376) (1785.18840850)  ;; *)
-
-
-  hohmann  (-6556995.342903) (7814.932739)  (-6556981.371618)
-  (15629.854376)
-    (radius
-      (to_absolute (-6556995.342903) (1800001.790116) )
-      (to_absolute  (7814.932739) (892.59737999))
-    );;

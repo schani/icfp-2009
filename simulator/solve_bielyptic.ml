@@ -1,4 +1,5 @@
 open Vm
+open Vec
 
 type strat = 
     {
@@ -46,7 +47,7 @@ let calc_inter fuel src dst =
   loop (dst /. 1.01)
 
 let run_bielleptic m dst = 
-  let inter = calc_inter (vm_read_fuel m) (Kurden_approximator.vec_length !pos0) dst in
+  let inter = calc_inter (vm_read_fuel m) (vec_length !pos0) dst in
   let thrust1,thrust2,thrust3,time2,time3,predictedpos,heuslristic = 
     (* Printf.printf "starting hohmann with %f %f %f %f\n"
       (x !pos0) (y !pos0) 

@@ -8,6 +8,7 @@ let get_aktuator = function
       | `Bielliptic -> Solve_bielyptic.aktuator
       | `Hohmann ->  Solve_hohman.aktuator)
   | Vm.MeetAndGreet -> Solve_meetandgreet.aktuator
+  | Vm.Eccentric -> Solve_eccentric.aktuator
   | _ -> (fun x -> x)
 
 let get_configs = function
@@ -53,14 +54,14 @@ let _ =
     else
       failwith "invalid commandline args"
   else
-    let problem = Vm.Hohmann in
+    let problem = Vm.Eccentric in
     let configs = get_configs problem in
     let rec loop = function 
       | [] -> 0
       | x::xs -> 
 	  Printf.fprintf stderr "running %d: \n" x;
 	  flush stdout;
-	  doit problem x; loop xs
+	  ignore(doit problem x); loop xs
     in
     let m = loop configs in
-    0
+    ignore m;0
