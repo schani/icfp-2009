@@ -17,6 +17,8 @@ type strat =
   }
 *)
 
+let min_inter = 6.6E6
+
 let x (x,y) = x
 let y (x,y) = y
 
@@ -32,7 +34,20 @@ let strategy = ref {
 
 let state = ref "before second"
 
-let run_bielleptic dst = 
+let calc_inter fuel src dst = 
+  let rec loop inter = 
+    let inter' = inter /. 1.01 in
+    let costs = Bielliptic.calculate_costs src inter' dst in 
+    Printf.printf "inter=%f fuel %f cost %f\n" inter' fuel costs;
+    if (inter' < min_inter) || (costs > fuel) then
+      inter
+    else
+      loop inter' 
+  in
+  loop (dst /. 1.01)
+
+let run_bielleptic m dst = 
+  let inter = calc_inter (vm_read_fuel m) (Kurden_approximator.vec_length !pos0) dst in
   let thrust1,thrust2,thrust3,time2,time3,predictedpos,heuslristic = 
     (* Printf.printf "starting hohmann with %f %f %f %f\n"
       (x !pos0) (y !pos0) 
@@ -40,7 +55,9 @@ let run_bielleptic dst =
     Bielliptic.bielliptic 
       (x !pos0) (y !pos0) 
       (x !pos1) (y !pos1)
-      dst in
+      dst 
+      inter
+  in
   ignore(predictedpos,heuslristic);
   {
     first_thrust = thrust1;
@@ -76,7 +93,7 @@ let aktuator =
     flush stdout;
     match m.timestep with
       | 2 -> 
-	  strategy := run_bielleptic (vm_read_sensor m 0x4);
+	  strategy := run_bielleptic m (vm_read_sensor m 0x4);
 	  Printf.printf "biel thrusts @ %d %d\n" !strategy.second_thrust_time
 	    !strategy.third_thrust_time;
 	  Printf.printf "first %d %f %f\n" 2

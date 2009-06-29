@@ -18,6 +18,7 @@ type strat =
 let x (x,y) = x
 let y (x,y) = y
 
+let original_r = ref 0.;;
 let pos0 = ref (0.,0.);;
 let pos1 = ref (0.,0.);;
 let strategy = ref {
@@ -57,19 +58,11 @@ let aktuator =
 	| _ -> 
 	    ()
     end;
-	  (* Printf.printf "%d %08.8f %08.8f %08.8f %08.8f\n" m.timestep fuel x
-	     y fuel; *)
-    (* do something with the above also halt leiwand zeichnen *) 
     ignore(fuel,x,y,target);
-    (* 
-       let m = vm_write_actuator m DeltaX 0. in
-       let m = vm_write_actuator m DeltaY 0. in
-    *)
     match m.timestep with
       | 2 -> 
+	  original_r := (Kurden_approximator.vec_length (posx,posy));
 	  strategy := run_hohmann (vm_read_sensor m 0x4);
-	  (* Printf.printf "hohman: %f %f" (x !strategy.first_thrust)
-	     (y !strategy.first_thrust); *)
 	  let m = vm_write_actuator m DeltaX (x !strategy.first_thrust)
 	  in
 	  let m = vm_write_actuator m DeltaY (y !strategy.first_thrust)
@@ -80,8 +73,29 @@ let aktuator =
 	  in
 	  let m = vm_write_actuator m DeltaY (y !strategy.second_thrust)
 	  in
-	  m
-      | _ ->
-	    let m = vm_write_actuator m DeltaX 0. in
-	    let m = vm_write_actuator m DeltaY 0. in
+	  let fuel = vm_read_fuel m in 
+	  let costs = 
+	    (abs_float (Hohmann.calculate_costs !original_r (vm_read_sensor m 4))) +.
+	      (abs_float (Hohmann.calculate_costs (vm_read_sensor m 4) !original_r))
+	  in
+	  Printf.printf "costs for one more %f = %f + %f \n" costs
+	    (Hohmann.calculate_costs !original_r (vm_read_sensor m 4))
+	    (Hohmann.calculate_costs (vm_read_sensor m 4) !original_r)
+	  ; flush;
+	  if (fuel *. 0.95) > costs then
+	    (
+	      if (!original_r -. 
+		(Kurden_approximator.vec_length (posx,posy))) < 10.
+	      then
+		strategy := run_hohmann (vm_read_sensor m 0x4)
+	      else
+		strategy := run_hohmann !original_r;
+	      m
+	    )
+	  else
 	    m
+      | _ ->
+	  let m = vm_write_actuator m DeltaX 0. in
+	  let m = vm_write_actuator m DeltaY 0. in
+	  m
+	    
