@@ -8,24 +8,33 @@ BAERLIDIR="simulator"
 GENERALSCHANIEXE="./runner"
 GENERALBAERLIEXE="./sim.opt"
 
-#this is only valid for ME on TI18!!!!!!!!!!!!!!!!!!!!!
-TMPDIR="/tmp/hoscherei"
-OUTPUTDIR="/homes/icfp/hoscherei"
 
-BINTRACEOUTPUTDIR=$OUTPUTDIR/bintraces
-EMPTRACEOUTPUTDIR=$OUTPUTDIR/emptraces
+#here comes the temporary files
+TMPDIR="/tmp/hoscherei"
+#here comes the final files
+OUTPUTBASEDIR="/homes/icfp/ierehcsoh_is_hoscherei_spelled_backwards/batteries_not_included"
 
 #compares two float values
 #returns 1 (first arg bigger) / 0 (equal) / -1 (second val bigger)
-#SCORECOMPARE="perl -le '$ta = sprintf(\"%020.15f\", $ARGV[0]);$tb = sprintf(\"%020.15f\", $ARGV[1]);print $ta cmp $tb;'"
 SCORECOMPARE="perl floatcompare.pl"
-      mv $TMPDIR/${problem}00${scenario}.baerli.emp $EMPTRACEOUTPUTDIR/${problem}00${scenario}.$BAERLIPOINTS.baerli.emp
+
+DIROFFSET="/$1"
 
 
+OUTPUTDIR=$OUTPUTBASEDIR$DIROFFSET
+BINTRACEOUTPUTDIR=$OUTPUTDIR/bintraces
+EMPTRACEOUTPUTDIR=$OUTPUTDIR/emptraces
+
+echo "removing old output directory..."
+rm -rf $OUTPUTDIR
+
+
+echo "generating directories..."
 #generate hoschereiverzeichnisse für outputsi
 mkdir -p $BINTRACEOUTPUTDIR $EMPTRACEOUTPUTDIR $TMPDIR
 
 
+echo "rebuilding executables..."
 #rebuild executables
 make --directory $SCHANIDIR all > /dev/null
 make --directory $BAERLIDIR all > /dev/null
@@ -72,9 +81,6 @@ for problem in 1 2 3 4; do
     fi
     # clean up tmpdir
     rm $TMPDIR/* &> /dev/null
-
-
-
 
 
 
