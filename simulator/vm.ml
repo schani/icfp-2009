@@ -33,6 +33,7 @@ type machine_state =
       output_ports: float array;
       timestep: int;
       config: float;
+(*       writer: machine_state; *)
     }
 
 let check_config problem = function
@@ -76,6 +77,7 @@ let alloc_machine problem memsize =
     output_ports = Array.make 0x66 0.;
     timestep = 0;
     config = 0.;
+(*    writer = 0; *)
   }
 
 let exchange_inputs m = 
@@ -145,6 +147,8 @@ let insn_to_string m = function
 	(d_code_to_string d) a1 a2 
 	(read_data m a1) (read_data m a2)
   | No_Instruction -> "Moo-nop"
+
+
 
 let execute_one_instruction m = 
   let m,insn = fetch_insn m in
@@ -314,8 +318,10 @@ let open_writer filname m =
   in
   write_frame,close_write
 
+
 let vm_set_output_filename m name = 
   {m with outputfilename = name}
+
 
 let vm_execute m controller = 
   let writer,closer = 
