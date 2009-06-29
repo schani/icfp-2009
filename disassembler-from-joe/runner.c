@@ -12,6 +12,8 @@
 #define WINNING_RADIUS		1000.0
 #define TARGET_RADIUS		10.0
 #define WINNING_TIMESTEPS	900
+#define MAX_DEBUGPOINTS		20
+
 
 typedef struct
 {
@@ -52,7 +54,40 @@ FILE *global_trace = NULL;
 machine_state_t global_state;
 machine_inputs_t global_old_inputs;
 double dump_orbit = -1;
-vector_t debug_point = { 0.0, 0.0 };
+vector_t debug_point[MAX_DEBUGPOINTS];
+
+
+
+static void set_debugpoint(int number, vector_t point){
+	if ((number >=0 ) && (number < MAX_DEBUGPOINTS))
+		debug_point[number] = point;
+}
+
+static void clear_debugpoint(int number){
+	set_debugpoint(number, v_zero );
+}
+
+static void init_debugpoints(void){
+	for (int i=0; i<MAX_DEBUGPOINTS; ++i){
+		clear_debugpoint(i);
+	}
+}
+
+static int is_set_debugpoint (int number){
+	return ((debug_point[number].x != 0) || (debug_point[number].y != 0));
+}
+
+static int count_enabled_debugpoints(){
+	int count=0;
+	for (int i=0; i<MAX_DEBUGPOINTS; ++i){
+		if (is_set_debugpoint(i)) ++count;
+	}
+	return count;
+}
+
+	
+
+
 
 static void
 set_input (machine_state_t *state, guint32 addr, double value)
@@ -141,11 +176,6 @@ clear_dump_orbit (void)
     dump_orbit = -1;
 }
 
-static void
-set_debug_point (vector_t p)
-{
-    debug_point = p;
-}
 
 
 /* Format of dump file:
@@ -166,26 +196,35 @@ print_timestep (machine_state_t *state)
 {
     double sx = -state->output[2];
     double sy = -state->output[3];
-    int count_debugpoints = 1;
-    
-    if ((debug_point.x == 0.0) && (debug_point.y == 0.0)){
-    	count_debugpoints = 0;
-    }
+
+	vector_t mydebugpoint = {-20000000.0, -20000000.0};
+
+	
+	set_debugpoint(0, mydebugpoint );
+
+	mydebugpoint.x = 40000000;
+	mydebugpoint.y = 40000000;
+	set_debugpoint(2, mydebugpoint );
+
+clear_debugpoint(0);
 
     if (dump_file != NULL){
     	//general
 		fprintf(dump_file, "%d %f %f %f %f ",
 			state->num_timesteps_executed, state->output[0], state->output[1], sx, sy);
 		//counts
-		fprintf(dump_file, "1 0 0 0 %d ", count_debugpoints);
+		fprintf(dump_file, "1 0 0 0 %d ", count_enabled_debugpoints());
 		//orbits 
 		fprintf(dump_file, "%f " ,state->output[4]);
 		//satellites
 		//moons
 		//fueling stations
 		//debug point (if there is one)
-		if (count_debugpoints != 0)
-			fprintf(dump_file, "%f %f ", debug_point.x, debug_point.y);
+		for (int i=0; i<MAX_DEBUGPOINTS; ++i){
+			if(is_set_debugpoint(i)){
+				fprintf(dump_file, "%f %f ", debug_point[i].x, debug_point[i].y);			
+			}
+		}
 		//comment (distance)
 		fprintf(dump_file, "%f\n", sqrt(sx * sx + sy * sy));
     }
@@ -201,18 +240,14 @@ print_timestep (machine_state_t *state)
     double dx = state->output[4];
     double dy = state->output[5];
     
-    int count_debugpoints = 1;
-    
-    if ((debug_point.x == 0.0) && (debug_point.y == 0.0)){
-    	count_debugpoints = 0;
-    }    
 
     if (dump_file != NULL) {
     	//general
 		fprintf(dump_file, "%d %f %f %f %f ", state->num_timesteps_executed,
 			state->output[0], state->output[1],	sx, sy); 
 		//counts
-		fprintf(dump_file, "%d 1 0 0 %d ", dump_orbit <= 0.0 ? 0 : 1, count_debugpoints);
+		fprintf(dump_file, "%d 1 0 0 %d ", 
+			dump_orbit <= 0.0 ? 0 : 1, count_enabled_debugpoints());
 		//orbits
 		if (dump_orbit > 0.0)
 		    fprintf(dump_file, "%f ", dump_orbit);
@@ -221,8 +256,11 @@ print_timestep (machine_state_t *state)
 		//moons
 		//fueling stations
 		//debug point (if there is one)	
-		if (count_debugpoints != 0)
-			fprintf(dump_file, "%f %f ", debug_point.x, debug_point.y);
+		for (int i=0; i<MAX_DEBUGPOINTS; ++i){
+			if(is_set_debugpoint(i)){
+				fprintf(dump_file, "%f %f ", debug_point[i].x, debug_point[i].y);			
+			}
+		}
 		//comment (distance)	 
 	 	fprintf(dump_file, "%f\n", sqrt(sx * sx + sy * sy));
     }
@@ -256,20 +294,14 @@ print_timestep (machine_state_t *state)
     double moonx = state->output[0x64];
     double moony = state->output[0x65];
 
-    int count_debugpoints = 1;
-    
-    if ((debug_point.x == 0.0) && (debug_point.y == 0.0)){
-    	count_debugpoints = 0;
-    }    
-
     
     if (dump_file != NULL) {
     	//general
 		fprintf(dump_file, "%d %f %f %f %f ", state->num_timesteps_executed,
 			state->output[0], state->output[1],	sx, sy); 
 		//counts
-		fprintf(dump_file, "%d %d 1 1 %d ", dump_orbit <= 0.0 ? 0 : 1,
-			max_sat, count_debugpoints);
+		fprintf(dump_file, "%d %d 1 1 %d ", 
+			dump_orbit <= 0.0 ? 0 : 1, max_sat, count_enabled_debugpoints());
 		//orbits
 		if (dump_orbit > 0.0)
 		    fprintf(dump_file, "%f ", dump_orbit);
@@ -284,8 +316,11 @@ print_timestep (machine_state_t *state)
 		//fueling station
 		fprintf(dump_file, "%f %f ", sx + fuelx, sy + fuely); 
 		//debug point (if there is one)	
-		if (count_debugpoints != 0)
-			fprintf(dump_file, "%f %f ", debug_point.x, debug_point.y);
+		for (int i=0; i<MAX_DEBUGPOINTS; ++i){
+			if(is_set_debugpoint(i)){
+				fprintf(dump_file, "%f %f ", debug_point[i].x, debug_point[i].y);			
+			}
+		}
 		//comment	 
 	 	fprintf(dump_file, "\n");
     }
@@ -1398,7 +1433,7 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
     print_vec(sat_perigee);
     g_print("\n\n");
 
-    set_debug_point(sat_perigee);
+    set_debugpoint(1, sat_perigee);
 
     delta = t_to_sat_apogee - t_to_our_apogee;
     sat_period = m_period(v_abs(v_sub(sat_apogee, sat_perigee))/2);
@@ -1557,6 +1592,9 @@ main (int argc, char *argv[])
     char *global_trace_name = NULL;
     int opt;
     int scenario = -1;
+
+	//init the debugpoints for further use
+	init_debugpoints();
 
     //fesetround(FE_TOWARDZERO);
 
@@ -1730,7 +1768,7 @@ main (int argc, char *argv[])
     int step_size = 7;
     int sat = 0;
 
-    set_debug_point(get_sat_n_pos(&global_state, sat));
+    set_debugpoint(1, get_sat_n_pos(&global_state, sat));
     do_follower(&global_state, get_get_sat_pos_func(sat),
 		constant_fuel_divisor_func, &divisor,
 		constant_skip_size_func, &step_size,
