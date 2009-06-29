@@ -8,10 +8,11 @@
 
 #include "search.h"
 
-#define MAX_TIMESTEPS		3000000
-#define WINNING_RADIUS		1000.0
-#define TARGET_RADIUS		10.0
-#define WINNING_TIMESTEPS	900
+#define MAX_TIMESTEPS			3000000
+#define WINNING_RADIUS			1000.0
+#define TARGET_RADIUS			10.0
+#define WINNING_TIMESTEPS		900
+#define CIRCULAR_ECCENTRICITY_TOLERANCE	0.001
 
 typedef struct
 {
@@ -1359,6 +1360,7 @@ do_schani_search (machine_state_t *state, get_pos_func_t get_pos_func,
 static void
 ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func)
 {
+    double our_eccentricity, sat_eccentricity;
     gboolean have_angle;
     vector_t our_apogee, our_perigee;
     vector_t sat_apogee, sat_perigee;
@@ -1373,7 +1375,7 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
     int num_iters;
     int num_B_revolution_steps = 0;
 
-    calc_ellipse_bertl(state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos);
+    our_eccentricity = calc_ellipse_bertl(state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos);
     our_period = m_period(v_abs(v_sub(our_apogee, our_perigee))/2);
     if (t_to_our_apogee > t_to_our_perigee)
 	t_to_our_apogee -= our_period;
@@ -1389,7 +1391,7 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
     g_print("(math) period : %f\n", our_period);
     g_print("(math) eccentricity : %f\n", m_eccentricity(v_abs(our_apogee), v_abs(our_perigee)));
 
-    calc_ellipse_bertl(state, &sat_apogee, &sat_perigee, &t_to_sat_apogee, &t_to_sat_perigee, get_pos_func);
+    sat_eccentricity = calc_ellipse_bertl(state, &sat_apogee, &sat_perigee, &t_to_sat_apogee, &t_to_sat_perigee, get_pos_func);
     sat_period = m_period(v_abs(v_sub(sat_apogee, sat_perigee))/2);
     if (t_to_sat_apogee > t_to_sat_perigee)
 	t_to_sat_apogee -= sat_period;
@@ -1496,12 +1498,18 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
     /* at D */
     inject_elliptical_to_circular(state, c_dist < v_abs(sat_perigee) ? 1.0 : -1.0,
 				  v_abs(sat_perigee), WINNING_TIMESTEPS, 1.0);
-    num_iters = timestep_until_angle_delta(state, angle_between_apsises, v_abs(sat_perigee) * 1.1, &have_angle);
-    g_print("took %d timesteps for angle %f\n", num_iters, angle_between_apsises * 180.0 / G_PI);
-    g_assert(have_angle);
 
-    /* at E */
-    inject_elliptical_to_elliptical(state, v_abs(sat_apogee), 1.0);
+    if (sat_eccentricity > CIRCULAR_ECCENTRICITY_TOLERANCE) {
+	num_iters = timestep_until_angle_delta(state, angle_between_apsises, v_abs(sat_perigee) * 1.1, &have_angle);
+	g_print("took %d timesteps for angle %f\n", num_iters, angle_between_apsises * 180.0 / G_PI);
+	g_assert(have_angle);
+
+	/* at E */
+	inject_elliptical_to_elliptical(state, v_abs(sat_apogee), 1.0);
+    } else {
+	g_print("circular satellite orbit - finished at point D\n");
+	do_n_timesteps(state, 1);
+    }
 
     clear_dump_orbit();
 
@@ -1660,17 +1668,15 @@ main (int argc, char *argv[])
     ellipse_to_ellipse_transfer(&global_state, get_meet_greet_sat_pos);
     g_print("done\n");
 
-    /*
 #if 1
     do_schani_search(&global_state, get_meet_greet_sat_pos, is_meet_greet_terminated, NULL);
 #else
     do_bertl_search(&global_state);
 #endif
-    */
 
 #elif defined(BIN4)
 
-#if 0
+#if 1
     for (;;) {
 	int best_sat = -1;
 	int best_sat_steps = MAX_TIMESTEPS;
