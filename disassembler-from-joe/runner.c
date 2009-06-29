@@ -10,6 +10,7 @@
 
 #define MAX_TIMESTEPS		3000000
 #define WINNING_RADIUS		1000.0
+#define TARGET_RADIUS		10.0
 #define WINNING_TIMESTEPS	900
 
 typedef struct
@@ -966,15 +967,18 @@ is_winning_state (machine_state_t *state, get_pos_func_t get_pos_func)
     machine_state_t copy = *state;
     int i;
 
-    if (v_abs(v_sub(get_pos(&copy), get_pos_func(&copy))) > WINNING_RADIUS)
-	return FALSE;
+    if (v_abs(v_sub(get_pos(&copy), get_pos_func(&copy))) <= TARGET_RADIUS)
+	return TRUE;
+    return FALSE;
 
+    /*
     for (i = 0; i < WINNING_TIMESTEPS; ++i) {
 	do_timestep(&copy);
-	if (v_abs(v_sub(get_pos(&copy), get_pos_func(&copy))) > WINNING_RADIUS)
+	if (v_abs(v_sub(get_pos(&copy), get_pos_func(&copy))) > TARGET_RADIUS)
 	    return FALSE;
     }
     return TRUE;
+    */
 }
 
 static gboolean
@@ -1049,6 +1053,31 @@ do_follower (machine_state_t *state, get_pos_func_t get_pos_func,
     return state->num_timesteps_executed;
 }
 
+static void
+do_final_thrust (machine_state_t *state, get_pos_func_t get_pos_func)
+{
+    vector_t our_pos = get_pos(state);
+    vector_t sat_pos = get_pos_func(state);
+    vector_t our_speed = get_speed(state);
+    vector_t sat_speed = get_speed_generic(state, get_pos_func);
+    int i;
+    double max_dist = v_abs(v_sub(our_pos, sat_pos));
+
+    g_print("distance before final thrust: %f\n", max_dist);
+
+    set_thrust(state, v_sub(sat_speed, our_speed));
+    for (i = 0; i < WINNING_TIMESTEPS; ++i) {
+	do_n_timesteps(state, 1);
+	our_speed = get_speed(state);
+	sat_speed = get_speed_generic(state, get_pos_func);
+	double dist = v_abs(v_sub(our_pos, sat_pos));
+	if (dist > max_dist)
+	    max_dist = dist;
+    }
+
+    g_print("max distance after final thrust: %f\n", max_dist);
+}
+
 static double
 do_follower_and_finish (machine_state_t *state, get_pos_func_t get_pos_func,
 			fuel_divisor_func_t fuel_divisor_func, gpointer fuel_divisor_data,
@@ -1061,6 +1090,8 @@ do_follower_and_finish (machine_state_t *state, get_pos_func_t get_pos_func,
 		skip_size_func, skip_size_data,
 		termination_condition_func, termination_condition_data,
 		print);
+
+    do_final_thrust(state, get_pos_func);
 
     while (state->num_timesteps_executed < MAX_TIMESTEPS && state->output[0] == 0.0)
 	do_n_timesteps(state, 1);
@@ -1440,8 +1471,6 @@ main (int argc, char *argv[])
     //    g_assert_not_reached();
 #elif defined(BIN2) || defined(BIN3)
 
-    do_n_timesteps(&global_state, 8464 * 10);
-
     ellipse_to_ellipse_transfer(&global_state, get_meet_greet_sat_pos);
     g_print("done\n");
 
@@ -1515,7 +1544,6 @@ main (int argc, char *argv[])
 	}
     }
 #else
-
     double divisor = 10.0;
     int step_size = 7;
     int sat = 0;
@@ -1536,7 +1564,7 @@ main (int argc, char *argv[])
 #endif
 
     while (global_state.num_timesteps_executed < 3000000 && global_state.output[0] == 0.0) {
-	global_timestep();
+	do_timestep(&global_state);
 	set_thrust(&global_state, v_zero);
     }
 
