@@ -1769,6 +1769,9 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
     vector_t D;
     ellipse_projection_t cd_proj = make_ellipse_projection_with_other_distance(state, C, v_abs(sat_perigee), &D);
 
+    set_debugpoint(2, C);
+    set_debugpoint(3, D);
+
     do_ellipse_follow_for_half_period(state, &cd_proj);
 
     /* at D */
