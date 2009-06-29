@@ -69,7 +69,7 @@ for problem in 1 2 3 4; do
 
     echo "evaluating schani..."
     cd $SCHANIDIR &> /dev/null
-    SCHANIPOINTS=`$PROBLEMSCHANIEXE -s ${problem}00${scenario} -d $TMPDIR/${problem}00${scenario}.schani.emp -t $TMPDIR/${problem}00${scenario}.schani.osf    | grep score | awk '{print $3}'`
+    SCHANIPOINTS=`$PROBLEMSCHANIEXE -s ${problem}00${scenario} -d $TMPDIR/${problem}00${scenario}.schani.emp -t $TMPDIR/${problem}00${scenario}.schani.osf    | awk '/score/ {print $3}' | sort -n | tail -1`
     cd - &> /dev/null
     echo "schani scored $SCHANIPOINTS points."
 
