@@ -72,6 +72,12 @@ type space_screen = {
   mutable spaceview_height :float; (* .. modified by zoom or gtk resize *)
 }
 
+let delete_traces = function () ->
+  our_history := [];
+  for i = 0 to 11 do
+    our_sats_histories.(i) <- [];
+  done
+
 (* convert spaceview coord into screen coord
  *)
 let ccx spasc coord =
@@ -423,6 +429,7 @@ let make_orbit_window () =
     in let _ = GMisc.label ~text:"Goto:" ~packing:(hbox1#pack ~expand:false) ()
     in let goto_box = GEdit.entry ~max_length:50
 	~packing:(hbox1#pack ~expand:false) ()
+    in let remove_timeout = ref (fun () -> ())
     in
       make_menu_item "Noting" (fun _ -> the_tracker := TR_None);
       make_menu_item "Our Sat" (fun _ -> the_tracker := TR_OurSat);
@@ -430,17 +437,12 @@ let make_orbit_window () =
 	make_menu_item (sprintf "Sat %i" i) (fun _ -> the_tracker := TR_Sat i)
       done;
       ignore (sat_nr_toggler#connect#toggled ~callback:
-		(fun () -> show_sat_nr := sat_nr_toggler#active));
+		(fun () ->
+		   show_sat_nr := sat_nr_toggler#active;
+		   if not !playing then
+		     refresh_da da
+		));
       hbox3#pack ~expand:false !status_line#coerce;
-      ignore (goto_box#connect#activate
-		~callback:(fun () ->
-			     try
-			       do_goto := Some (int_of_string goto_box#text)
-			     with
-				 _ ->
-				   fprintf stderr "illegal goto line\n";
-				   flush stderr;
-				   do_goto := None));
       ignore (GMisc.label ~text:"" ~packing:(hbox3#pack ~expand:true) ());
       da#misc#realize ();
       let mousepos = GMisc.label ~text:"" ~packing:(hbox2#pack ~expand:false) ()
@@ -485,13 +487,28 @@ let make_orbit_window () =
 	  resize_screen spasc da_width da_height;
 	  refresh_da da;
 	  true
-    in let remove_timeout = ref (fun () -> ())
+    in let last_stamp = ref 0
     in let rec timeout_handler () =
 	if !playing then begin
 	  let stamp, score, fuel, x, y,
 	    orbits, sats, moons, fusts, debugs, rem =
-	    q.Vmbridge.step spasc.speed;
-	  in let rec record_more_traces ?(i=0) = function
+	    (match !do_goto with
+	       | Some goal when goal > !last_stamp ->
+		   let result = q.Vmbridge.step (goal - !last_stamp)
+		   in
+		     bplay#set_label "Play";
+		     playing := false;
+		     !remove_timeout ();
+		     do_goto := None;
+		     goto_box#set_text "";
+		     delete_traces ();
+		     result
+	       | _ ->
+		   q.Vmbridge.step spasc.speed
+	    );
+	  in
+	    last_stamp := stamp;
+	    let rec record_more_traces ?(i=0) = function
 		[] -> ()
 	    | (x, y) :: r ->
 		let old_x, old_y =
@@ -681,12 +698,17 @@ let make_orbit_window () =
 		   spasc.spaceview_y <- 0.0;
 		   zoomer#set_value initial_zoom;
 		   refresh_da da));
-      ignore (deltraces_button#connect#clicked ~callback:
-		(function () ->
-		   our_history := [];
-		   for i = 0 to 11 do
-		     our_sats_histories.(i) <- [];
-		 done;));
+      ignore (deltraces_button#connect#clicked ~callback:delete_traces);
+      ignore (goto_box#connect#activate
+		~callback:(fun () ->
+			     try
+			       do_goto := Some (int_of_string goto_box#text);
+			       start_playing ();
+			       with
+				 _ ->
+				   fprintf stderr "illegal goto line\n";
+				   flush stderr;
+				   do_goto := None));
       let da_width, da_height = Gdk.Drawable.get_size (da#misc#window)
       in
 	resize_screen spasc da_width da_height;
