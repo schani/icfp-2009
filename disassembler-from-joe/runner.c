@@ -10,10 +10,12 @@
 
 #define MAX_TIMESTEPS			3000000
 #define WINNING_RADIUS			1000.0
+#define FUEL_STATION_RADIUS		500.0
 #define TARGET_RADIUS			10.0
 #define WINNING_TIMESTEPS		900
 #define CIRCULAR_ECCENTRICITY_TOLERANCE	0.001
-#define MAX_DEBUGPOINTS		20
+#define MAX_DEBUGPOINTS			20
+#define EARTH_RADIUS			6.357e6
 
 typedef struct
 {
@@ -441,19 +443,6 @@ global_timestep (void)
     print_timestep(&global_state);
 }
 
-static void
-do_timestep (machine_state_t *state)
-{
-    if (state == &global_state) {
-	global_timestep();
-#if defined(BIN2) || defined(BIN3)
-	//g_print("%d %f\n", state->num_timesteps_executed, v_abs(v_sub(get_pos(state), get_meet_greet_sat_pos(state))));
-#endif
-    } else
-	timestep(state);
-    //g_print("ts %d score %f\n", state->num_timesteps_executed, state->output[0]);
-}
-
 static vector_t
 get_thrust (machine_state_t *state)
 {
@@ -539,6 +528,24 @@ static void
 print_vec (vector_t v)
 {
     g_print("(%f,%f)", v.x, v.y);
+}
+
+static void
+do_timestep (machine_state_t *state)
+{
+    if (state == &global_state) {
+	global_timestep();
+#if defined(BIN2) || defined(BIN3)
+	//g_print("%d %f\n", state->num_timesteps_executed, v_abs(v_sub(get_pos(state), get_meet_greet_sat_pos(state))));
+#endif
+	if (v_abs(get_thrust(state)) != 0.0) {
+	    g_print("### thrusting %f ", v_abs(get_thrust(state)));
+	    print_vec(get_thrust(state));
+	    g_print("\n");
+	}
+    } else
+	timestep(state);
+    //g_print("ts %d score %f\n", state->num_timesteps_executed, state->output[0]);
 }
 
 static vector_t
@@ -1209,6 +1216,17 @@ is_sat_hit_terminated (machine_state_t *state, get_pos_func_t get_pos_func, gpoi
 
     return get_sat_n_collected(state, sat_num);
 }
+
+static gboolean
+is_fuel_station_hit (machine_state_t *state, get_pos_func_t get_pos_func, gpointer user_data)
+{
+    if (state->num_timesteps_executed >= MAX_TIMESTEPS)
+	return TRUE;
+    if (state->output[0] != 0.0)
+	return TRUE;
+
+    return v_abs(v_sub(get_pos(state), get_fuel_station_pos(state))) < FUEL_STATION_RADIUS;
+}
 #endif
 
 static int
@@ -1556,8 +1574,66 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
     }
 
     clear_dump_orbit();
+    set_debugpoint(0, v_zero);
 
     g_print("at end of bertl maneuver: %f off\n", v_abs(v_sub(get_pos(state), get_pos_func(state))));
+}
+
+static void
+park_orbit (machine_state_t *state, double target_perigee, double tolerance)
+{
+    vector_t our_apogee, our_perigee;
+    int t_to_our_apogee, t_to_our_perigee;
+    double min, max;
+
+    calc_ellipse_bertl(state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos);
+    while (v_abs(our_perigee) < target_perigee) {
+	g_print("trying to get to perigee %f - thrusting\n", target_perigee);
+	set_thrust(state, v_mul_scal(v_norm(get_speed(state)), 10.0));
+	do_n_timesteps(state, 1);
+	calc_ellipse_bertl(state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos);
+	g_print("perigee is %f\n", v_abs(our_perigee));
+    }
+
+    /*
+    g_print("parking orbit from pos ");
+    print_vec(get_pos(state));
+    g_print(" - trying to get from %f to %f\n", v_abs(our_perigee), target_perigee);
+
+    min = 0.0;
+    max = 2000.0;
+
+    while (min < max) {
+	machine_state_t copy = *state;
+	double middle = (min + max) / 2;
+	vector_t thrust = v_mul_scal(v_norm(get_speed(&copy)), middle);
+	double perigee;
+
+	g_print("trying thrust %f ", middle);
+	print_vec(thrust);
+	g_print("\n");
+
+	set_thrust(&copy, thrust);
+	do_n_timesteps(&copy, 1);
+
+	calc_ellipse_bertl(&copy, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos);
+	perigee = v_abs(our_perigee);
+
+	g_print("perigee is %f\n", perigee);
+
+	if (fabs(perigee - target_perigee) <= tolerance) {
+	    set_thrust(state, thrust);
+	    return;
+	}
+
+	if (perigee < target_perigee)
+	    min = middle;
+	else
+	    max = middle;
+    }
+
+    g_assert_not_reached();
+    */
 }
 
 static void
@@ -1723,7 +1799,7 @@ main (int argc, char *argv[])
 
 #elif defined(BIN4)
 
-#if 1
+#if 0
     for (;;) {
 	int best_sat = -1;
 	int best_sat_steps = MAX_TIMESTEPS;
@@ -1787,18 +1863,44 @@ main (int argc, char *argv[])
 	}
     }
 #else
-    int sat = 0;
-    double divisor = 50.0;
-    int step_size = 10;
+    int sat;
+    int steps;
+    double divisor = 10.0;
+    int step_size = 7;
 
-    set_debugpoint(1, get_sat_n_pos(&global_state, sat));
-    ellipse_to_ellipse_transfer(&global_state, get_get_sat_pos_func(sat));
-    g_print("done\n");
-    do_follower(&global_state, get_get_sat_pos_func(sat),
-		constant_fuel_divisor_func, &divisor,
-		constant_skip_size_func, &step_size,
-		is_sat_hit_terminated, &sat,
-		FALSE);
+    for (sat = 0; sat < 11; ++sat) {
+	g_assert(!get_sat_n_collected(&global_state, sat));
+
+	g_print("trying to hit sat %d\n", sat);
+
+	ellipse_to_ellipse_transfer(&global_state, get_get_sat_pos_func(sat));
+	steps = do_follower(&global_state, get_get_sat_pos_func(sat),
+			    constant_fuel_divisor_func, &divisor,
+			    constant_skip_size_func, &step_size,
+			    is_sat_hit_terminated, &sat,
+			    TRUE);
+
+	if (get_sat_n_collected(&global_state, sat)) {
+	    g_print("hit in step %d\n", steps);
+	} else {
+	    g_print("terminated in step %d\n", steps);
+	}
+
+	g_print("trying to hit fueling station\n");
+
+	ellipse_to_ellipse_transfer(&global_state, get_fuel_station_pos);
+	steps = do_follower(&global_state, get_fuel_station_pos,
+			    constant_fuel_divisor_func, &divisor,
+			    constant_skip_size_func, &step_size,
+			    is_fuel_station_hit, NULL,
+			    TRUE);
+
+	park_orbit(&global_state, MIN(v_abs(get_pos(&global_state)),
+				      v_abs(get_fuel_station_pos(&global_state))), 5.0);
+
+	if (sat == 0)
+	    break;
+    }
 #endif
 
 
