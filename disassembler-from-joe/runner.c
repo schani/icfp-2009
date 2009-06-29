@@ -965,8 +965,8 @@ calc_ellipse (machine_state_t *state, vector_t *apogee, vector_t *perigee, int *
 
 static double
 calc_ellipse_bertl(machine_state_t *state, vector_t *apogee, vector_t *perigee,
-		int *t_to_apogee, int *t_to_perigee,
-		get_pos_func_t get_pos_func)
+		   int *t_to_apogee, int *t_to_perigee,
+		   get_pos_func_t get_pos_func, double dist_limit)
 {
     machine_state_t copy = *state;
 
@@ -1007,6 +1007,9 @@ calc_ellipse_bertl(machine_state_t *state, vector_t *apogee, vector_t *perigee,
 	    max_pos = pos;
 	    max_iter = iter;
 	}
+
+	if (dist_limit > 0 && dist > dist_limit)
+	    return -1;
 
 	sign_delta = a_sign(angle - start_angle);
 	if (sign_last != sign_delta) {
@@ -1514,8 +1517,8 @@ make_ellipse_projection (machine_state_t *state, vector_t start_apsis, vector_t 
 	proj.apogee = other_apsis;
 	proj.perigee_timestep = state->num_timesteps_executed;
     } else {
-	proj.apogee = other_apsis;
-	proj.perigee = start_apsis;
+	proj.perigee = other_apsis;
+	proj.apogee = start_apsis;
 	proj.perigee_timestep = state->num_timesteps_executed - m_half_period(v_abs(v_sub(start_apsis, other_apsis)) / 2);
     }
 
@@ -1555,7 +1558,7 @@ get_ellipsis_projection_pos (int timestep, ellipse_projection_t *proj)
 
     g_assert(timestep >= 0 && timestep < period);
 
-    return calc_ellipse_pos(proj->perigee, proj->apogee, timestep);
+    return calc_ellipse_pos(proj->apogee, proj->perigee, timestep);
 }
 
 static vector_t
@@ -1642,7 +1645,7 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
     int num_iters;
     int num_B_revolution_steps = 0;
 
-    our_eccentricity = calc_ellipse_bertl(state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos);
+    our_eccentricity = calc_ellipse_bertl(state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos, -1);
     our_period = m_period(v_abs(v_sub(our_apogee, our_perigee))/2);
     if (t_to_our_apogee > t_to_our_perigee)
 	t_to_our_apogee -= our_period;
@@ -1658,7 +1661,7 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
     g_print("(math) period : %f\n", our_period);
     g_print("(math) eccentricity : %f\n", m_eccentricity(v_abs(our_apogee), v_abs(our_perigee)));
 
-    sat_eccentricity = calc_ellipse_bertl(state, &sat_apogee, &sat_perigee, &t_to_sat_apogee, &t_to_sat_perigee, get_pos_func);
+    sat_eccentricity = calc_ellipse_bertl(state, &sat_apogee, &sat_perigee, &t_to_sat_apogee, &t_to_sat_perigee, get_pos_func, -1);
     sat_period = m_period(v_abs(v_sub(sat_apogee, sat_perigee))/2);
     if (t_to_sat_apogee > t_to_sat_perigee)
 	t_to_sat_apogee -= sat_period;
@@ -1827,7 +1830,7 @@ ellipse_to_circular_transfer (machine_state_t *state)
     double min, max;
     double target;
 
-    calc_ellipse_bertl(state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos);
+    calc_ellipse_bertl(state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos, -1);
 
     do_n_timesteps(state, MIN(t_to_our_perigee, t_to_our_apogee));
 
@@ -1841,23 +1844,25 @@ ellipse_to_circular_transfer (machine_state_t *state)
 	double middle = (min + max) / 2;
 	vector_t thrust = v_mul_scal(get_norm_speed(&copy), middle);
 	double value;
+	double result;
 
 	set_thrust(&copy, thrust);
 	do_n_timesteps(&copy, 1);
 
 	g_print("trying thrust %f\n", thrust);
-	calc_ellipse_bertl(&copy, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos);
+	result = calc_ellipse_bertl(&copy, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee,
+				    get_pos, target * 1.5);
 
 	value = v_abs(our_apogee);
 
-	g_print("value is %f - should be %f\n", value, target);
+	g_print("result %f value is %f - should be %f\n", result, value, target);
 
-	if (fabs(value - target) < CIRCULAR_ORBIT_THRESHOLD) {
+	if (result >= 0 && fabs(value - target) < CIRCULAR_ORBIT_THRESHOLD) {
 	    set_thrust(state, thrust);
 	    return;
 	}
 
-	if (value < target)
+	if (result >= 0 && value < target)
 	    min = middle;
 	else
 	    max = middle;
@@ -1874,7 +1879,7 @@ transfer_to_circular_target (machine_state_t *state, double target)
     double eccentricity;
     int num_steps;
 
-    eccentricity = calc_ellipse_bertl(state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos);
+    eccentricity = calc_ellipse_bertl(state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos, -1);
 
     if (eccentricity > CIRCULAR_ECCENTRICITY_TOLERANCE) {
 	g_print("not circular - doing transfer\n");
@@ -1898,12 +1903,12 @@ park_orbit (machine_state_t *state, double target_perigee, double tolerance)
     int t_to_our_apogee, t_to_our_perigee;
     double min, max;
 
-    calc_ellipse_bertl(state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos);
+    calc_ellipse_bertl(state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos, -1);
     while (v_abs(our_perigee) < target_perigee) {
 	g_print("trying to get to perigee %f - thrusting\n", target_perigee);
 	set_thrust(state, v_mul_scal(v_norm(get_speed(state)), 20.0));
 	do_n_timesteps(state, 1);
-	calc_ellipse_bertl(state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos);
+	calc_ellipse_bertl(state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos, -1);
 	g_print("perigee is %f\n", v_abs(our_perigee));
     }
 
@@ -2068,9 +2073,9 @@ main (int argc, char *argv[])
 
     dest_apogee = global_state.output[4];
 
-    //transfer_to_circular_target(&global_state, dest_apogee);
+    transfer_to_circular_target(&global_state, dest_apogee);
 
-#if 1
+#if 0
     num_iters = inject_elliptical_to_elliptical(&global_state, dest_apogee, 1.0);
 
 #if 1
