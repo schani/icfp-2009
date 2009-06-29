@@ -646,14 +646,18 @@ timestep_until_angle (machine_state_t *state, double dest_angle, double max_dist
 static int
 timestep_until_angle_delta (machine_state_t *state, double angle_delta, double max_dist, gboolean *have_angle)
 {
-    double dest_angle = get_angle(state) + angle_delta;
+    double dest_angle = a_norm(get_angle(state) + angle_delta);
+    int num_steps = 0;
 
     g_assert(angle_delta >= 0.0);
 
-    if (dest_angle > G_PI)
-	dest_angle -= 2.0 * G_PI;
+    if (angle_delta > G_PI) {
+	num_steps += timestep_until_angle(state, a_norm(get_angle(state) + G_PI), max_dist, have_angle);
+	if (have_angle != NULL && !*have_angle)
+	    return num_steps;
+    }
 
-    return timestep_until_angle(state, dest_angle, max_dist, have_angle);
+    return num_steps + timestep_until_angle(state, dest_angle, max_dist, have_angle);
 }
 
 static double
@@ -1214,6 +1218,9 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
     double delta;
     int i;
     int num_iters;
+    int num_B_revolution_steps = 0;
+
+ restart:
 
     calc_ellipse_bertl(state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos);
 
@@ -1237,6 +1244,8 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
     g_print("   perigee (%f) ", v_angle(sat_perigee) / G_PI * 180.0);
     print_vec(sat_perigee);
     g_print("\n\n");
+
+    set_debug_point(sat_perigee);
 
     delta = t_to_sat_apogee - t_to_our_apogee;
     sat_period = m_period(v_abs(v_sub(sat_apogee, sat_perigee))/2);
@@ -1270,12 +1279,30 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
 	double b = v_abs(sat_perigee);
 	double T = delta + u1 + 2 * i * u1 - t2 - t5;
 
-	g_print("trying bertl solve with a = %f  b = %f  T = %f  (n=%d)\n", a, b, T, i);
+	if (T >= t34_min) {
+	    g_print("trying bertl solve with a = %f  b = %f  T = %f  (n=%d)\n", a, b, T, i);
 
-	h = m_solve_t3t4(a, b, T, 0.5);
-	//h = simulation_calc_h(state, delta + u1 + 2 * i * u1 - t2 - t5);
-	if (h >= h_min)
+	    /*
+	    if (T - t34_min >= our_period) {
+		int num_revolutions = (int)floor((T - t34_min) / our_period);
+		num_b_revolution_steps = (int)floor(our_period) * num_revolutions;
+		g_print("T is more than our period - doing %d revolutions\n", num_revolutions);
+		do_n_timesteps(state, num_b_revolution_steps);
+		T -= num_b_revolution_steps;
+		g_assert(T >= t34_min);
+	    }
+	    */
+
+	    h = m_solve_t3t4(a, b, T, 0.5);
+	    g_assert(h >= h_min);
 	    break;
+
+	    /*
+	    //h = simulation_calc_h(state, delta + u1 + 2 * i * u1 - t2 - t5);
+	    if (h >= h_min)
+		break;
+	    */
+	}
 
 	++i;
     }
@@ -1313,13 +1340,16 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
     /* at D */
     inject_elliptical_to_circular(state, c_dist < v_abs(sat_perigee) ? 1.0 : -1.0,
 				  v_abs(sat_perigee), WINNING_TIMESTEPS, 1.0);
-    timestep_until_angle(state, v_angle(sat_perigee), v_abs(sat_perigee) * 1.1, &have_angle);
+    num_iters = timestep_until_angle_delta(state, angle_between_apsises, v_abs(sat_perigee) * 1.1, &have_angle);
+    g_print("took %d timesteps for angle %f\n", num_iters, angle_between_apsises * 180.0 / G_PI);
     g_assert(have_angle);
 
     /* at E */
     inject_elliptical_to_elliptical(state, v_abs(sat_apogee), 1.0);
 
     clear_dump_orbit();
+
+    g_print("at end of bertl maneuver: %f off\n", v_abs(v_sub(get_pos(state), get_pos_func(state))));
 }
 
 static void
