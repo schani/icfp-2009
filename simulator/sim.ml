@@ -9,18 +9,13 @@ let get_aktuator = function
       | `Hohmann ->  Solve_hohman.aktuator)
   | Vm.MeetAndGreet -> Solve_meetandgreet.aktuator
   | Vm.Eccentric -> Solve_eccentric.aktuator
-  | _ -> (fun x -> 
-      
-      ignore(Printf.printf "final points %f\n" (-2.); flush stdout);
-      exit 0;
-      x
-    )
+  | Vm.ClearSky -> Solve_eccentric.sky_net
 
 let get_configs = function
   | Vm.Hohmann -> [1002] (* ;1002;1003;1004] *)
   | Vm.MeetAndGreet -> [2003] (*  [2001;2002;2003;2004]*)
-  | Vm.Eccentric -> [3001]
-  | Vm.ClearSky -> [4001]
+  | Vm.Eccentric -> [3004]
+  | Vm.ClearSky -> [4002]
 
 let problem_by_config = function
   | 1001 | 1002 | 1003 | 1004 -> Vm.Hohmann
@@ -28,12 +23,17 @@ let problem_by_config = function
   | 3001 | 3002 | 3003 | 3004 -> Vm.Eccentric
   | 4001 | 4002 | 4003 | 4004 -> Vm.ClearSky
   | _ -> failwith "invalid config"
-      
+
+let quitter m =       
+  ignore(Printf.printf "final points %f\n" (vm_read_score m); flush stdout);
+  ignore(exit 0);
+  m
+
 let doit problem config = 
   let aktuator = get_aktuator problem in 
   
   let machine = Vm.vm_init_machine problem in
-  let machine = Vm.vm_configure machine config in
+  let machine = Vm.vm_configure machine config quitter in
   let machine = Vm.vm_set_output_filename machine ((string_of_int config)^".osf") in
   
   let emp_dumper = Emp_dumper.get_emp_dump_writer stdout in
@@ -59,7 +59,7 @@ let _ =
     else
       failwith "invalid commandline args"
   else
-    let problem = Vm.Eccentric in
+    let problem = Vm.ClearSky in
     let configs = get_configs problem in
     let rec loop = function 
       | [] -> 0

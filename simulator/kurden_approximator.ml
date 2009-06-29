@@ -30,9 +30,9 @@ let step_machine m =
   do_steps_f m 1 (fun m -> m)
 
 let zerothrust_steps m time = 
-  Printf.printf "zeroing %d\n" time;
+  (* Printf.printf "zeroing %d\n" time;*)
   do_steps_f m time (fun m -> 
-    Printf.printf "zero\n";
+    (* Printf.printf "zero\n";*)
     (Vm.vm_write_thrust m (0.,0.)))
 
 let min x y = 
@@ -68,11 +68,11 @@ let calculate_orbit_velocity_vector m speed_we =
 
 (* follows for "one" step *)
 let follower_step m weprev heprev = 
-  match Speculate.do_we_win m with 
+  (* match Speculate.do_we_win m with 
     | Some m -> 
 	let m = zerothrust_steps m 900 in 
 	m
-    | None -> 
+     | None ->  *)
 	let wenow = Vm.vm_read_ourpos m in
 	let henow = Vm.vm_read_sat_pos m 0 in
 	let abs_we = (vec_neg wenow) in
@@ -93,15 +93,16 @@ let follower_step m weprev heprev =
 	  *)
 	  let correction_thrust = vec_minus speed_he speed_we in
 	  let m = step_machine (Vm.vm_write_thrust m correction_thrust) in
-	  Printf.printf "ZEROTHURSTING now for1000000 %d \n" m.Vm.timestep;
+	  (* Printf.printf "ZEROTHURSTING now for1000000 %d \n"
+	     m.Vm.timestep; *)
 	  let m = zerothrust_steps m 1000000 in 
 	  m
 	else if (vec_length henow) > mindist then 
-	  let _ = 
-	    Printf.printf "will thrust\n";
-	    Printf.printf "thrust: %f %f %f %f %f %b\n" 
-	      tx ty (vec_length thrust) (vec_length henow) (Vm.vm_read_fuel m) ((vec_length henow) > (Vm.vm_read_fuel m)) ; 
-	    flush stdout;
+	  let _ = 0
+	    (* Printf.printf "will thrust\n";
+	       Printf.printf "thrust: %f %f %f %f %f %b\n" 
+	       tx ty (vec_length thrust) (vec_length henow) (Vm.vm_read_fuel m) ((vec_length henow) > (Vm.vm_read_fuel m)) ; 
+	       flush stdout; *) 
 	  in
 	  let m = step_machine (Vm.vm_write_thrust m thrust) in
 	  let m = zerothrust_steps m skip_size in
