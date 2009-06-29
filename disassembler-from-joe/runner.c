@@ -1325,9 +1325,10 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
     int num_iters;
     int num_B_revolution_steps = 0;
 
- restart:
-
     calc_ellipse_bertl(state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos);
+    our_period = m_period(v_abs(v_sub(our_apogee, our_perigee))/2);
+    if (t_to_our_apogee > t_to_our_perigee)
+	t_to_our_apogee -= our_period;
 
     g_print("s us: t to apogee: %d  perigee: %d\n", t_to_our_apogee, t_to_our_perigee);
     g_print("apogee (%f) ", v_angle(our_apogee) / G_PI * 180.0);
@@ -1336,12 +1337,14 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
     print_vec(our_perigee);
     g_print("\n\n");
 
-    our_period = m_period(v_abs(v_sub(our_apogee, our_perigee))/2);
     t2 = our_period / 2;
     g_print("(math) period : %f\n", our_period);
     g_print("(math) eccentricity : %f\n", m_eccentricity(v_abs(our_apogee), v_abs(our_perigee)));
 
     calc_ellipse_bertl(state, &sat_apogee, &sat_perigee, &t_to_sat_apogee, &t_to_sat_perigee, get_pos_func);
+    sat_period = m_period(v_abs(v_sub(sat_apogee, sat_perigee))/2);
+    if (t_to_sat_apogee > t_to_sat_perigee)
+	t_to_sat_apogee -= sat_period;
 
     g_print("s sat: t to apogee: %d  perigee: %d\n", t_to_sat_apogee, t_to_sat_perigee);
     g_print("apogee (%f) ", v_angle(sat_apogee) / G_PI * 180.0);
@@ -1353,7 +1356,6 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
     set_debug_point(sat_perigee);
 
     delta = t_to_sat_apogee - t_to_our_apogee;
-    sat_period = m_period(v_abs(v_sub(sat_apogee, sat_perigee))/2);
     u1 = sat_period / 2;
     g_print("(math) period : %f\n", sat_period);
     g_print("(math) eccentricity : %f\n", m_eccentricity(v_abs(sat_apogee), v_abs(sat_perigee)));
@@ -1387,6 +1389,7 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
 	if (T >= t34_min) {
 	    g_print("trying bertl solve with a = %f  b = %f  T = %f  (n=%d)\n", a, b, T, i);
 
+	    /*
 	    if (T - t34_min >= our_period) {
 		int num_revolutions = (int)floor((T - t34_min) / our_period);
 		num_B_revolution_steps = (int)floor(our_period * num_revolutions);
@@ -1395,6 +1398,7 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
 		T -= num_B_revolution_steps;
 		g_assert(T >= t34_min);
 	    }
+	    */
 
 	    h = m_solve_t3t4(a, b, T, 0.5);
 	    g_assert(h >= h_min);
@@ -1608,11 +1612,13 @@ main (int argc, char *argv[])
     ellipse_to_ellipse_transfer(&global_state, get_meet_greet_sat_pos);
     g_print("done\n");
 
+    /*
 #if 1
     do_schani_search(&global_state, get_meet_greet_sat_pos, is_meet_greet_terminated, NULL);
 #else
     do_bertl_search(&global_state);
 #endif
+    */
 
 #elif defined(BIN4)
 
@@ -1623,33 +1629,31 @@ main (int argc, char *argv[])
 	int steps;
 	double divisor = 10.0;
 	int step_size = 7;
+	int sat;
 
-	for (i = 0; i < 11; ++i) {
-	    if (!get_sat_n_collected(&global_state, i)) {
+	for (sat = 0; sat < 11; ++sat) {
+	    if (!get_sat_n_collected(&global_state, sat)) {
 		machine_state_t copy = global_state;
 
-		g_print("trying to hit sat %d\n", i);
+		g_print("trying to hit sat %d\n", sat);
 
-		steps = do_follower(&copy, get_get_sat_pos_func(i),
+		ellipse_to_ellipse_transfer(&copy, get_get_sat_pos_func(sat));
+		steps = do_follower(&copy, get_get_sat_pos_func(sat),
 				    constant_fuel_divisor_func, &divisor,
 				    constant_skip_size_func, &step_size,
-				    is_sat_hit_terminated, &i,
+				    is_sat_hit_terminated, &sat,
 				    FALSE);
 
-		if (get_sat_n_collected(&copy, i)) {
+		if (get_sat_n_collected(&copy, sat)) {
 		    g_print("hit in step %d\n", steps);
-
-		    if (steps < best_sat_steps) {
-			best_sat = i;
-			best_sat_steps = steps;
-		    }
+		    break;
 		} else {
 		    g_print("terminated in step %d\n", steps);
 		}
 	    }
 	}
 
-	if (best_sat == -1) {
+	if (sat == 11) {
 	    gboolean need_sats = FALSE;
 	    g_print("done - sats not hit:");
 	    for (i = 0; i < 11; ++i) {
@@ -1659,37 +1663,40 @@ main (int argc, char *argv[])
 		}
 	    }
 	    g_print("\n");
+	    break;
+	    /*
 	    if (need_sats) {
 		g_print("still sats to hit - will wait for 10 steps\n");
 		do_n_timesteps(&global_state, 10);
 	    } else {
 		break;
 	    }
+	    */
 	} else {
-	    g_print("hitting sat %d at step %d\n", best_sat, best_sat_steps);
+	    g_print("hitting sat %d at step %d\n", sat, steps);
 
-	    steps = do_follower(&global_state, get_get_sat_pos_func(best_sat),
+	    ellipse_to_ellipse_transfer(&global_state, get_get_sat_pos_func(sat));
+	    steps = do_follower(&global_state, get_get_sat_pos_func(sat),
 				constant_fuel_divisor_func, &divisor,
 				constant_skip_size_func, &step_size,
-				is_sat_hit_terminated, &best_sat,
+				is_sat_hit_terminated, &sat,
 				FALSE);
-	    g_assert(steps == best_sat_steps);
-	    g_assert(get_sat_n_collected(&global_state, best_sat));
+	    g_assert(global_state.num_timesteps_executed == steps);
+	    g_assert(get_sat_n_collected(&global_state, sat));
 	}
     }
 #else
-    double divisor = 10.0;
-    int step_size = 7;
     int sat = 0;
+    double divisor = 50.0;
+    int step_size = 10;
 
-    set_debug_point(get_sat_n_pos(&global_state, sat));
+    ellipse_to_ellipse_transfer(&global_state, get_get_sat_pos_func(sat));
+    g_print("done\n");
     do_follower(&global_state, get_get_sat_pos_func(sat),
 		constant_fuel_divisor_func, &divisor,
 		constant_skip_size_func, &step_size,
 		is_sat_hit_terminated, &sat,
-		TRUE);
-
-    do_n_timesteps(&global_state, 10);
+		FALSE);
 #endif
 
 
