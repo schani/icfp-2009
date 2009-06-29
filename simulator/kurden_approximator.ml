@@ -132,12 +132,14 @@ let follower_step m weprev heprev =
 	  zerothrust_steps m 1
 	    
 let follow m = 
-let rec loop m = 
+(* let writer = m.writer in*)
+  let rec loop m = 
+    (*  let m = writer m in *)
     let pos = Vm.vm_read_ourpos m in
     let his_pos = Vm.vm_read_sat_pos m 0 in
-    if Vm.vm_is_done m then
-      m 
-    else
-      loop (follower_step (zerothrust_steps m 1) pos his_pos)
+      if Vm.vm_is_done m then
+	m 
+      else
+	loop (follower_step (zerothrust_steps m 1) pos his_pos)
   in
-  loop m 
+    loop m 

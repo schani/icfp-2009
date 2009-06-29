@@ -41,8 +41,7 @@ let step m frames =
 	  (m, frames)
     | _ -> (m, frames);;
 
-
-let run_simulation osf_filename =
+let run_simulation osf_filename = 
   let (config_id, framelist) = read_osf_file osf_filename in
   let problem_type = config_to_problem config_id  in
   let m = vm_init_machine problem_type in
@@ -68,4 +67,4 @@ let run_simulation osf_filename =
   m.osf_closer m;
   Printf.printf "muhkuh scored: %f in move %d\n" score m.timestep;
   score;;
-    
+

@@ -69,7 +69,7 @@ let compose_comment m =
 	      loop (acc^(if vm_read_sat_killed m num then "1" else "0")) (num+1)
 	in
 	(loop "emptrace killed" 0)
-    | MeetAndGreet -> 
+    | MeetAndGreet | Eccentric -> 
 	let dist = vec_len (vm_read_sat_pos m 0) in
 	("emptrace disttodst "^(string_of_float dist))
     | _ -> 
