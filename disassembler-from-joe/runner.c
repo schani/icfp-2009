@@ -812,7 +812,7 @@ calc_ellipse (machine_state_t *state, vector_t *apogee, vector_t *perigee, int *
 }
 
 
-static void
+static double
 calc_ellipse_bertl(machine_state_t *state, vector_t *apogee, vector_t *perigee,
 		int *t_to_apogee, int *t_to_perigee,
 		get_pos_func_t get_pos_func)
@@ -845,7 +845,6 @@ calc_ellipse_bertl(machine_state_t *state, vector_t *apogee, vector_t *perigee,
 	dist = v_abs(pos);
 	angle = v_angle(pos);
 
-
 	if (dist < min_dist) {
 	    min_dist = dist;
 	    min_pos = pos;
@@ -865,6 +864,14 @@ calc_ellipse_bertl(machine_state_t *state, vector_t *apogee, vector_t *perigee,
 	}
     } while (sign_flip < 3);
 
+    /* angular re-alignment */
+
+    double delta = v_angle(max_pos) + G_PI - v_angle(min_pos);
+    min_pos = v_rotate(min_pos, delta);
+
+    if (abs(delta) > 1.0)
+	g_print("!!! angular realignment %f\n", delta);
+
     if (apogee)
 	*apogee = max_pos;
     if (perigee)
@@ -873,6 +880,8 @@ calc_ellipse_bertl(machine_state_t *state, vector_t *apogee, vector_t *perigee,
 	*t_to_apogee = max_iter;
     if (t_to_perigee)
 	*t_to_perigee = min_iter;
+	
+    return m_eccentricity(v_abs(max_pos), v_abs(min_pos));
 }
 
 #ifdef BIN4
