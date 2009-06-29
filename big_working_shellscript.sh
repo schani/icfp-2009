@@ -27,8 +27,8 @@ mkdir -p $BINTRACEOUTPUTDIR $EMPTRACEOUTPUTDIR $TMPDIR
 
 
 #rebuild executables
-make --directory $SCHANIDIR all
-make --directory $BAERLIDIR all
+make --directory $SCHANIDIR all > /dev/null
+make --directory $BAERLIDIR all > /dev/null
 
 
 
