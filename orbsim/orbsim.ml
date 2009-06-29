@@ -185,7 +185,7 @@ let paint_diamond surface x y r =
   Cairo.stroke surface
 
 let paint_square surface x y r =
-  Cairo.rectangle surface (x -. r) (y -. r) r r;
+  Cairo.rectangle surface (x -. r) (y -. r) (r *. 2.0) (r *. 2.0);
   Cairo.stroke surface
 
 let paint_rect surface x1 y1 x2 y2 =
