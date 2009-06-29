@@ -8,12 +8,14 @@
 
 #include "search.h"
 
-#define MAX_TIMESTEPS		3000000
-#define WINNING_RADIUS		1000.0
-#define TARGET_RADIUS		10.0
-#define WINNING_TIMESTEPS	900
-#define MAX_DEBUGPOINTS		20
-
+#define MAX_TIMESTEPS			3000000
+#define WINNING_RADIUS			1000.0
+#define FUEL_STATION_RADIUS		500.0
+#define TARGET_RADIUS			10.0
+#define WINNING_TIMESTEPS		900
+#define CIRCULAR_ECCENTRICITY_TOLERANCE	0.001
+#define MAX_DEBUGPOINTS			20
+#define EARTH_RADIUS			6.357e6
 
 typedef struct
 {
@@ -441,19 +443,6 @@ global_timestep (void)
     print_timestep(&global_state);
 }
 
-static void
-do_timestep (machine_state_t *state)
-{
-    if (state == &global_state) {
-	global_timestep();
-#if defined(BIN2) || defined(BIN3)
-	//g_print("%d %f\n", state->num_timesteps_executed, v_abs(v_sub(get_pos(state), get_meet_greet_sat_pos(state))));
-#endif
-    } else
-	timestep(state);
-    //g_print("ts %d score %f\n", state->num_timesteps_executed, state->output[0]);
-}
-
 static vector_t
 get_thrust (machine_state_t *state)
 {
@@ -539,6 +528,24 @@ static void
 print_vec (vector_t v)
 {
     g_print("(%f,%f)", v.x, v.y);
+}
+
+static void
+do_timestep (machine_state_t *state)
+{
+    if (state == &global_state) {
+	global_timestep();
+#if defined(BIN2) || defined(BIN3)
+	//g_print("%d %f\n", state->num_timesteps_executed, v_abs(v_sub(get_pos(state), get_meet_greet_sat_pos(state))));
+#endif
+	if (v_abs(get_thrust(state)) != 0.0) {
+	    g_print("### thrusting %f ", v_abs(get_thrust(state)));
+	    print_vec(get_thrust(state));
+	    g_print("\n");
+	}
+    } else
+	timestep(state);
+    //g_print("ts %d score %f\n", state->num_timesteps_executed, state->output[0]);
 }
 
 static vector_t
@@ -1209,6 +1216,17 @@ is_sat_hit_terminated (machine_state_t *state, get_pos_func_t get_pos_func, gpoi
 
     return get_sat_n_collected(state, sat_num);
 }
+
+static gboolean
+is_fuel_station_hit (machine_state_t *state, get_pos_func_t get_pos_func, gpointer user_data)
+{
+    if (state->num_timesteps_executed >= MAX_TIMESTEPS)
+	return TRUE;
+    if (state->output[0] != 0.0)
+	return TRUE;
+
+    return v_abs(v_sub(get_pos(state), get_fuel_station_pos(state))) < FUEL_STATION_RADIUS;
+}
 #endif
 
 static int
@@ -1404,11 +1422,14 @@ do_schani_search (machine_state_t *state, get_pos_func_t get_pos_func,
 static void
 ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func)
 {
+    double our_eccentricity, sat_eccentricity;
     gboolean have_angle;
     vector_t our_apogee, our_perigee;
     vector_t sat_apogee, sat_perigee;
     int t_to_our_apogee, t_to_our_perigee;
     int t_to_sat_apogee, t_to_sat_perigee;
+    int t0 = state->num_timesteps_executed;
+    int tB, tC, tD, tE;
     double our_period, sat_period;
     double t2, u1, t5;
     double t34_min, h, h_min;
@@ -1418,7 +1439,7 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
     int num_iters;
     int num_B_revolution_steps = 0;
 
-    calc_ellipse_bertl(state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos);
+    our_eccentricity = calc_ellipse_bertl(state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos);
     our_period = m_period(v_abs(v_sub(our_apogee, our_perigee))/2);
     if (t_to_our_apogee > t_to_our_perigee)
 	t_to_our_apogee -= our_period;
@@ -1434,7 +1455,7 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
     g_print("(math) period : %f\n", our_period);
     g_print("(math) eccentricity : %f\n", m_eccentricity(v_abs(our_apogee), v_abs(our_perigee)));
 
-    calc_ellipse_bertl(state, &sat_apogee, &sat_perigee, &t_to_sat_apogee, &t_to_sat_perigee, get_pos_func);
+    sat_eccentricity = calc_ellipse_bertl(state, &sat_apogee, &sat_perigee, &t_to_sat_apogee, &t_to_sat_perigee, get_pos_func);
     sat_period = m_period(v_abs(v_sub(sat_apogee, sat_perigee))/2);
     if (t_to_sat_apogee > t_to_sat_perigee)
 	t_to_sat_apogee -= sat_period;
@@ -1486,7 +1507,7 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
 	    if (T - t34_min >= our_period) {
 		int num_revolutions = (int)floor((T - t34_min) / our_period);
 		num_B_revolution_steps = (int)floor(our_period * num_revolutions);
-		g_print("T is more than our period - doing %d revolutions\n", num_revolutions);
+		g_print("### T is more than our period - doing %d revolutions\n", num_revolutions);
 		do_n_timesteps(state, num_B_revolution_steps);
 		T -= num_B_revolution_steps;
 		g_assert(T >= t34_min);
@@ -1509,15 +1530,23 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
 
     g_print("found target h %f with n = %d\n", h, i);
 
-    g_print("tA  = %f\ntAS = %f\ntB  = %f\ntC  = %f\ntD  = %f\ntE  = %f\ntD2 = %f\n",
+    tB = (int)(t_to_our_apogee + t2);
+    tC = (int)(tB + m_half_period((h + v_abs(our_perigee)) / 2));
+    tD = (int)(t_to_our_apogee + t2 + m_half_period((h + v_abs(our_perigee)) / 2) 
+	       + m_half_period((h + v_abs(sat_perigee)) / 2));
+    tE = (int)(t_to_our_apogee + delta + u1 + 2 * i * u1);
+    g_print("tA  = %f\ntAS = %f\ntB  = %d\ntC  = %d\ntD  = %d\ntE  = %d\ntD2 = %f\n",
 	    (double)t_to_our_apogee,
 	    t_to_our_apogee + delta,
-	    t_to_our_apogee + t2,
-	    t_to_our_apogee + t2 + m_half_period((h + v_abs(our_perigee)) / 2),
-	    t_to_our_apogee + t2 + m_half_period((h + v_abs(our_perigee)) / 2) 
-				 + m_half_period((h + v_abs(sat_perigee)) / 2),
-	    t_to_our_apogee + delta + u1 + 2 * i * u1,
+	    tB, tC, tD, tE,
 	    t_to_our_apogee + delta + u1 + 2 * i * u1 - t5);
+
+    /* at B */
+
+    g_print("### at B - distance %f (should be %f)  direction %f  time %d (should be %d)\n",
+	    distance_from_earth(state), v_abs(our_perigee),
+	    a_delta(v_angle(get_pos(state)), v_angle(get_norm_speed(state))) * 180.0 / G_PI,
+	    state->num_timesteps_executed - t0, tB);
 
     num_iters = inject_elliptical_to_elliptical(state, h, 1.0);
     do_n_timesteps(state, num_iters);
@@ -1533,24 +1562,102 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
 
     double c_dist = distance_from_earth(state);
 
-    g_print("at C: %f\n", c_dist);
+    g_print("### at C - distance %f (should be %f)  direction %f  time %d (should be %d)\n",
+	    c_dist, h,
+	    a_delta(v_angle(get_pos(state)), v_angle(get_norm_speed(state))) * 180.0 / G_PI,
+	    state->num_timesteps_executed - t0, tC);
 
     num_iters = inject_elliptical_to_elliptical(state, v_abs(sat_perigee), 1.0);
     do_n_timesteps(state, num_iters);
 
     /* at D */
+
+    g_print("### at D - distance %f (should be %f) direction %f  time %d (should be %d)\n",
+	    distance_from_earth(state), v_abs(sat_perigee),
+	    a_delta(v_angle(get_pos(state)), v_angle(get_norm_speed(state))) * 180.0 / G_PI,
+	    state->num_timesteps_executed - t0, tD);
+
     inject_elliptical_to_circular(state, c_dist < v_abs(sat_perigee) ? 1.0 : -1.0,
 				  v_abs(sat_perigee), WINNING_TIMESTEPS, 1.0);
-    num_iters = timestep_until_angle_delta(state, angle_between_apsises, v_abs(sat_perigee) * 1.1, &have_angle);
-    g_print("took %d timesteps for angle %f\n", num_iters, angle_between_apsises * 180.0 / G_PI);
-    g_assert(have_angle);
 
-    /* at E */
-    inject_elliptical_to_elliptical(state, v_abs(sat_apogee), 1.0);
+    if (sat_eccentricity > CIRCULAR_ECCENTRICITY_TOLERANCE) {
+	num_iters = timestep_until_angle_delta(state, angle_between_apsises, v_abs(sat_perigee) * 1.1, &have_angle);
+	g_print("took %d timesteps for angle %f\n", num_iters, angle_between_apsises * 180.0 / G_PI);
+	g_assert(have_angle);
+
+	/* at E */
+	g_print("### at E - distance %f (should be %f) direction %f  time %d (should be %d)\n",
+		distance_from_earth(state), v_abs(sat_perigee),
+		a_delta(v_angle(get_pos(state)), v_angle(get_norm_speed(state))) * 180.0 / G_PI,
+		state->num_timesteps_executed - t0, tE);
+
+	inject_elliptical_to_elliptical(state, v_abs(sat_apogee), 1.0);
+    } else {
+	g_print("circular satellite orbit - finished at point D\n");
+	do_n_timesteps(state, 1);
+    }
 
     clear_dump_orbit();
+    set_debugpoint(0, v_zero);
 
     g_print("at end of bertl maneuver: %f off\n", v_abs(v_sub(get_pos(state), get_pos_func(state))));
+}
+
+static void
+park_orbit (machine_state_t *state, double target_perigee, double tolerance)
+{
+    vector_t our_apogee, our_perigee;
+    int t_to_our_apogee, t_to_our_perigee;
+    double min, max;
+
+    calc_ellipse_bertl(state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos);
+    while (v_abs(our_perigee) < target_perigee) {
+	g_print("trying to get to perigee %f - thrusting\n", target_perigee);
+	set_thrust(state, v_mul_scal(v_norm(get_speed(state)), 20.0));
+	do_n_timesteps(state, 1);
+	calc_ellipse_bertl(state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos);
+	g_print("perigee is %f\n", v_abs(our_perigee));
+    }
+
+    /*
+    g_print("parking orbit from pos ");
+    print_vec(get_pos(state));
+    g_print(" - trying to get from %f to %f\n", v_abs(our_perigee), target_perigee);
+
+    min = 0.0;
+    max = 2000.0;
+
+    while (min < max) {
+	machine_state_t copy = *state;
+	double middle = (min + max) / 2;
+	vector_t thrust = v_mul_scal(v_norm(get_speed(&copy)), middle);
+	double perigee;
+
+	g_print("trying thrust %f ", middle);
+	print_vec(thrust);
+	g_print("\n");
+
+	set_thrust(&copy, thrust);
+	do_n_timesteps(&copy, 1);
+
+	calc_ellipse_bertl(&copy, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos);
+	perigee = v_abs(our_perigee);
+
+	g_print("perigee is %f\n", perigee);
+
+	if (fabs(perigee - target_perigee) <= tolerance) {
+	    set_thrust(state, thrust);
+	    return;
+	}
+
+	if (perigee < target_perigee)
+	    min = middle;
+	else
+	    max = middle;
+    }
+
+    g_assert_not_reached();
+    */
 }
 
 static void
@@ -1708,13 +1815,11 @@ main (int argc, char *argv[])
     ellipse_to_ellipse_transfer(&global_state, get_meet_greet_sat_pos);
     g_print("done\n");
 
-    /*
 #if 1
     do_schani_search(&global_state, get_meet_greet_sat_pos, is_meet_greet_terminated, NULL);
 #else
     do_bertl_search(&global_state);
 #endif
-    */
 
 #elif defined(BIN4)
 
@@ -1782,18 +1887,41 @@ main (int argc, char *argv[])
 	}
     }
 #else
-    int sat = 0;
-    double divisor = 50.0;
-    int step_size = 10;
+    int sat;
+    int steps;
+    double divisor = 10.0;
+    int step_size = 7;
 
-    set_debugpoint(1, get_sat_n_pos(&global_state, sat));
-    ellipse_to_ellipse_transfer(&global_state, get_get_sat_pos_func(sat));
-    g_print("done\n");
-    do_follower(&global_state, get_get_sat_pos_func(sat),
-		constant_fuel_divisor_func, &divisor,
-		constant_skip_size_func, &step_size,
-		is_sat_hit_terminated, &sat,
-		FALSE);
+    for (sat = 9; sat >= 0; --sat) {
+	g_assert(!get_sat_n_collected(&global_state, sat));
+
+	g_print("trying to hit sat %d\n", sat);
+
+	ellipse_to_ellipse_transfer(&global_state, get_get_sat_pos_func(sat));
+	steps = do_follower(&global_state, get_get_sat_pos_func(sat),
+			    constant_fuel_divisor_func, &divisor,
+			    constant_skip_size_func, &step_size,
+			    is_sat_hit_terminated, &sat,
+			    TRUE);
+
+	if (get_sat_n_collected(&global_state, sat)) {
+	    g_print("hit in step %d\n", steps);
+	} else {
+	    g_print("terminated in step %d\n", steps);
+	}
+
+	g_print("trying to hit fueling station\n");
+
+	ellipse_to_ellipse_transfer(&global_state, get_fuel_station_pos);
+	steps = do_follower(&global_state, get_fuel_station_pos,
+			    constant_fuel_divisor_func, &divisor,
+			    constant_skip_size_func, &step_size,
+			    is_fuel_station_hit, NULL,
+			    TRUE);
+
+	park_orbit(&global_state, MIN(v_abs(get_pos(&global_state)),
+				      v_abs(get_fuel_station_pos(&global_state))), 5.0);
+    }
 #endif
 
 
