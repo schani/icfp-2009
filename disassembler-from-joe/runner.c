@@ -1054,9 +1054,10 @@ calc_ellipse_pos(vector_t apogee, vector_t perigee, double time)
     double y = sin(E) * b;
     
     vector_t center = v_mul_scal(v_add(apogee, perigee), 0.5);
-    vector_t res = { x, -y };
+    double tilt = v_angle(v_sub(apogee, center));
 
-    return (v_rotate(v_add(res, center), v_angle(apogee)));
+    vector_t res = { -x, y };
+    return (v_add(v_rotate(res, tilt), center));
 }
 
 
@@ -1519,7 +1520,8 @@ make_ellipse_projection (machine_state_t *state, vector_t start_apsis, vector_t 
     } else {
 	proj.perigee = other_apsis;
 	proj.apogee = start_apsis;
-	proj.perigee_timestep = state->num_timesteps_executed - m_half_period(v_abs(v_sub(start_apsis, other_apsis)) / 2);
+	proj.perigee_timestep = state->num_timesteps_executed - 
+		m_half_period(v_abs(v_sub(start_apsis, other_apsis)) / 2);
     }
 
     return proj;
