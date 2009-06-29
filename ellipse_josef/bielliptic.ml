@@ -95,9 +95,3 @@ let bielliptic sx1 sy1 sx2 sy2 zielradius inter =
       (length (bi_dritter_schub  (to_our sx2) (to_our sy2) inter zielradius rich))
     )
 );;
-
-bielliptic (-6556995.342903) 7814.930000 (-6556981.371618) 15629.848899
-  42164000.000000;;
-
-hohmann (-6556995.342903) 7814.930000 (-6556981.371618) 15629.848899
-  42164000.000000;;

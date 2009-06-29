@@ -33,9 +33,9 @@ let calc_next_pos pos prev =
   let gtvec = gt (vec_neg pos) in
   vec_add (vec_add pos (vec_minus pos prev)) (vec_scalar_mult 0.5 gtvec)
 
-let emp_dumper = Emp_dumper.get_emp_dump_writer stdout
 
 let do_steps_f m time func = 
+  let emp_dumper = Emp_dumper.get_emp_dump_writer stdout in
   let rec loop i m = 
     if i = 0 then
       m

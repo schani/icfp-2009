@@ -38,7 +38,6 @@ let calc_inter fuel src dst =
   let rec loop inter = 
     let inter' = inter /. 1.01 in
     let costs = Bielliptic.calculate_costs src inter' dst in 
-    Printf.printf "inter=%f fuel %f cost %f\n" inter' fuel costs;
     if (inter' < min_inter) || (costs > fuel) then
       inter
     else
@@ -94,20 +93,12 @@ let aktuator =
     match m.timestep with
       | 2 -> 
 	  strategy := run_bielleptic m (vm_read_sensor m 0x4);
-	  Printf.printf "biel thrusts @ %d %d\n" !strategy.second_thrust_time
-	    !strategy.third_thrust_time;
-	  Printf.printf "first %d %f %f\n" 2
-	    (x !strategy.first_thrust)
-	    (y !strategy.first_thrust);
 	  let m = vm_write_actuator m DeltaX (x !strategy.first_thrust)
 	  in
 	  let m = vm_write_actuator m DeltaY (y !strategy.first_thrust)
 	  in
 	  m
       | step when step = !strategy.second_thrust_time ->
-	  Printf.printf "second %d %f %f\n" step
-	    (x !strategy.second_thrust)
-	    (y !strategy.second_thrust);
 	  state := "before third";
 	  let m = vm_write_actuator m DeltaX (x !strategy.second_thrust)
 	  in
@@ -115,10 +106,6 @@ let aktuator =
 	  in
 	  m
       | step when step = !strategy.third_thrust_time ->
-	  Printf.printf "third %d %f %f\n" step
-	    (x !strategy.third_thrust)
-	    (y !strategy.third_thrust);
-	  flush stdout;
 	  state := "after third";
 	  let m = vm_write_actuator m DeltaX (x !strategy.third_thrust)
 	  in

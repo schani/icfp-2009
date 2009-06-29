@@ -16,6 +16,13 @@ let get_configs = function
   | Vm.Eccentric -> [3001]
   | Vm.ClearSky -> [4001]
 
+let problem_by_config = function
+  | 1001 | 1002 | 1003 | 1004 -> Vm.Hohmann
+  | 2001 | 2002 | 2003 | 2004 -> Vm.MeetAndGreet
+  | 3001 | 3002 | 3003 | 3004 -> Vm.Eccentric
+  | 4001 | 4002 | 4003 | 4004 -> Vm.ClearSky
+  | _ -> failwith "invalid config"
+      
 let doit problem config = 
   let aktuator = get_aktuator problem in 
   
@@ -25,15 +32,26 @@ let doit problem config =
   
   let emp_dumper = Emp_dumper.get_emp_dump_writer stdout in
 
-  let _ = Vm.vm_execute machine (fun m -> 
+  let m = Vm.vm_execute machine (fun m -> 
     ignore(emp_dumper m);
     aktuator m) 
   in
-  ()
+  m
+
+(* -s XXXX => XXXX.osf XXX.emp *)
 
 let _ = 
-  if (Array.length Sys.argv) > 1 then
+  if (Array.length Sys.argv) = 2 then
     (ignore(Simulation.run_simulation Sys.argv.(1));0)
+  else if (Array.length Sys.argv) = 3 then
+    if Sys.argv.(1) = "-s" then
+      let config = int_of_string (Sys.argv.(2)) in
+      let problem = problem_by_config config in
+      let _ = Emp_dumper.get_emp_dump_writer (open_out ((string_of_int config)^".emp")) in
+      let m = doit problem config in
+      ignore(Printf.printf "final points %f\n" (vm_read_score m); flush stdout);0
+    else
+      failwith "invalid commandline args"
   else
     let problem = Vm.Hohmann in
     let configs = get_configs problem in
@@ -44,4 +62,5 @@ let _ =
 	  flush stdout;
 	  doit problem x; loop xs
     in
-    loop configs
+    let m = loop configs in
+    0

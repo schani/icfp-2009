@@ -75,25 +75,36 @@ let compose_comment m =
     | _ -> 
 	"emptrace"
 
+let empdumper = ref None
+
 let get_emp_dump_writer oc = 	
-  fun m ->
-    let time = m.timestep in
-    let score = vm_read_score m in
-    let fuel = vm_read_fuel m in
-    let mypos = our_pos_string m in
-    let orbitcount,orbitstring = orbits_to_string m in
-    let satcount,satstring = sats_string m in
-    let mooncount,moonstring = moons_string m in
-    let fuelingcount,fuelingstr = fuelstations_to_string m in
-    let debugcount,debugstr = 0,"" in
-    (* time score fuel  x y #o #sat #moon #fuel #debug fo fo .. sx sy
-       ... mx my ... dx dy ... remifiziert *)
-    Printf.fprintf oc "%i %f %f %s %d %d %d %d %d %s %s %s %s %s %s\n"
-      time score fuel mypos 
-      orbitcount satcount mooncount fuelingcount debugcount
-    orbitstring satstring moonstring fuelingstr debugstr
-      (compose_comment m);
-    m
+  match !empdumper with 
+    | None -> 
+	let f = (fun m ->
+	  let time = m.timestep in
+	  let score = vm_read_score m in
+	  let fuel = vm_read_fuel m in
+	  let mypos = our_pos_string m in
+	  let orbitcount,orbitstring = orbits_to_string m in
+	  let satcount,satstring = sats_string m in
+	  let mooncount,moonstring = moons_string m in
+	  let fuelingcount,fuelingstr = fuelstations_to_string m in
+	  let debugcount,debugstr = 0,"" in
+	  (* time score fuel  x y #o #sat #moon #fuel #debug fo fo .. sx sy
+	     ... mx my ... dx dy ... remifiziert *)
+	  Printf.fprintf oc "%i %f %f %s %d %d %d %d %d %s %s %s %s %s %s\n"
+	    time score fuel mypos 
+	    orbitcount satcount mooncount fuelingcount debugcount
+	    orbitstring satstring moonstring fuelingstr debugstr
+	    (compose_comment m);
+	  m
+	) 
+	in
+	empdumper := Some f;
+	f
+    | Some f -> 
+	f
+	    
   
 
   
