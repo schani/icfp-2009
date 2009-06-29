@@ -472,6 +472,12 @@ m_period(double semi_major)
 }
 
 static double
+m_half_period(double semi_major)
+{
+    return m_period(semi_major)/2;
+}
+
+static double
 m_focal_dist(double apoapsis, double periapsis)
 {
     return apoapsis - periapsis;
@@ -506,7 +512,7 @@ m_solve_t3t4(double a, double b, double T, double precision)
 
     do {
 	h = (interval[0] + interval[1])/2.0;
-	val = m_period((a+h)/2.0)/2.0 + m_period((b+h)/2.0)/2.0;
+	val = m_half_period((a+h)/2.0) + m_half_period((b+h)/2.0);
 
 	if (val < T) {
 	    interval[0] = h;
@@ -1259,8 +1265,8 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
     sat_perigee_period = m_period(v_abs(sat_perigee));
     t5 = sat_perigee_period * (angle_between_apsises / (G_PI * 2.0));
 
-    t34_min = (m_period(v_abs(our_perigee)) / 2
-	       + m_period((v_abs(our_perigee) + v_abs(sat_perigee)) / 2)) / 2;
+    t34_min = (m_half_period(v_abs(our_perigee))
+	       + m_half_period((v_abs(our_perigee) + v_abs(sat_perigee)) / 2));
     h_min = v_abs(our_perigee);
 
     set_dump_orbit(v_abs(sat_perigee));
@@ -1311,8 +1317,9 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
 	    (double)t_to_our_apogee,
 	    t_to_our_apogee + delta,
 	    t_to_our_apogee + t2,
-	    t_to_our_apogee + t2 + m_period((h + v_abs(our_perigee)) / 2) / 2,
-	    t_to_our_apogee + t2 + m_period((h + v_abs(our_perigee)) / 2) / 2 + m_period((h + v_abs(sat_perigee)) / 2) / 2,
+	    t_to_our_apogee + t2 + m_half_period((h + v_abs(our_perigee)) / 2),
+	    t_to_our_apogee + t2 + m_half_period((h + v_abs(our_perigee)) / 2) 
+				 + m_half_period((h + v_abs(sat_perigee)) / 2),
 	    t_to_our_apogee + delta + u1 + 2 * i * u1,
 	    t_to_our_apogee + delta + u1 + 2 * i * u1 - t5);
 
