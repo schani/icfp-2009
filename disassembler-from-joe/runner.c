@@ -280,6 +280,16 @@ get_meet_greet_sat_pos (machine_state_t *state)
 }
 #elif defined(BIN4)
 
+static gboolean
+get_sat_n_collected (machine_state_t *state, int n)
+{
+    g_assert(n >= 0 && n < 11);
+
+    double dx = state->output[3 * n + 9];
+
+    return dx != 0.0;
+}
+
 static void
 print_timestep (machine_state_t *state)
 {
@@ -309,7 +319,15 @@ print_timestep (machine_state_t *state)
 		for (int i=0; i<max_sat; ++i){
 			double dx = state->output[3*i+7];
         	double dy = state->output[3*i+8];
-			fprintf(dump_file, "%f %f ", sx + dx, sy + dy);
+        	
+        	
+			if (!get_sat_n_collected(&global_state, i)) {
+				//satellite not hit - draw normal
+				fprintf(dump_file, "%f %f ", sx + dx, sy + dy);
+			} else {
+				//satellite hit - move to the center of the earth
+				fprintf(dump_file, "%f %f ", 0.0, 0.0);
+			}
 		}
 		//moon
 		fprintf(dump_file, "%f %f ", sx + moonx, sy + moony); 
@@ -354,15 +372,7 @@ get_sat_n_pos (machine_state_t *state, int n)
     return v;
 }
 
-static gboolean
-get_sat_n_collected (machine_state_t *state, int n)
-{
-    g_assert(n >= 0 && n < 11);
 
-    double dx = state->output[3 * n + 9];
-
-    return dx != 0.0;
-}
 
 static vector_t get_sat_0_pos (machine_state_t *state) { return get_sat_n_pos(state, 0); }
 static vector_t get_sat_1_pos (machine_state_t *state) { return get_sat_n_pos(state, 1); }
