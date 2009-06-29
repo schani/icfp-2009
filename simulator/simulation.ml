@@ -48,24 +48,24 @@ let run_simulation osf_filename =
   let m = vm_init_machine problem_type in
   let m = vm_configure m config_id in
   let m = vm_set_output_filename m (osf_filename^".simulated.osf") in
-  let writer,closer = open_writer m.outputfilename m in
+  let m = open_writer m.outputfilename m in
   let rec loop m frames = 
     if not (vm_is_done m) then
       begin
 	(*      Printf.printf "%d \n " t; *)
 	let (m, frames) = step m frames in
-	  begin
-	    let m = writer m in
-            let m = vm_execute_one_step m in
-	      loop m frames 
-	  end
+	begin
+	  let m = m.osf_writer m in
+          let m = vm_execute_one_step m in
+	  loop m frames 
+	end
       end
     else
       m
   in 
   let m = loop m framelist in
   let score = vm_read_sensor m 0 in
-      closer m;
-      Printf.printf "muhkuh scored: %f in move %d\n" score m.timestep;
-      score;;
+  m.osf_closer m;
+  Printf.printf "muhkuh scored: %f in move %d\n" score m.timestep;
+  score;;
     

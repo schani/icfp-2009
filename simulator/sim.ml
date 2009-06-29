@@ -12,7 +12,7 @@ let get_aktuator = function
 
 let get_configs = function
   | Vm.Hohmann -> [1001] (* ;1002;1003;1004] *)
-  | Vm.MeetAndGreet -> [2002] (*  [2001;2002;2003;2004]*)
+  | Vm.MeetAndGreet -> [2004] (*  [2001;2002;2003;2004]*)
   | Vm.Eccentric -> [3001]
   | Vm.ClearSky -> [4001]
 
@@ -45,8 +45,3 @@ let _ =
 	  doit problem x; loop xs
     in
     loop configs
-(* FAQ: 
- * 
- * no questions yet.
- * 
- *)
