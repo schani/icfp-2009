@@ -1,6 +1,6 @@
 open Vm
 
-let hohmannmode = `Hohmann
+let hohmannmode = `Bielliptic
   (* let hohmannmode = `Bielliptic*)
 
 let get_aktuator = function 
@@ -11,8 +11,8 @@ let get_aktuator = function
   | _ -> (fun x -> x)
 
 let get_configs = function
-  | Vm.Hohmann -> [1001] (* ;1002;1003;1004] *)
-  | Vm.MeetAndGreet -> [2002] (*  [2001;2002;2003;2004]*)
+  | Vm.Hohmann -> [1002] (* ;1002;1003;1004] *)
+  | Vm.MeetAndGreet -> [2003] (*  [2001;2002;2003;2004]*)
   | Vm.Eccentric -> [3001]
   | Vm.ClearSky -> [4001]
 
@@ -35,7 +35,7 @@ let _ =
   if (Array.length Sys.argv) > 1 then
     (ignore(Simulation.run_simulation Sys.argv.(1));0)
   else
-    let problem = Vm.MeetAndGreet in
+    let problem = Vm.Hohmann in
     let configs = get_configs problem in
     let rec loop = function 
       | [] -> 0
@@ -45,8 +45,3 @@ let _ =
 	  doit problem x; loop xs
     in
     loop configs
-(* FAQ: 
- * 
- * no questions yet.
- * 
- *)

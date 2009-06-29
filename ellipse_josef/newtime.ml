@@ -82,8 +82,8 @@ let absolute_time_to_start ichx1 ichy1 ichx2 ichy2 siex1 siey1 siex2 siey2
       else 
 	(delta_th-.2.*.pi) /. (v_a -. v_b)
   in
-  Printf.printf "abs_time_to_start: %f %f at %f bt %f va %f vb %f ath %f bth %f dth %f\n" 
-    res t_h alpha_t beta_t v_a v_b alpha_th beta_th delta_th; 
+  (* Printf.printf "abs_time_to_start: %f %f at %f bt %f va %f vb %f ath %f bth %f dth %f\n" 
+     res t_h alpha_t beta_t v_a v_b alpha_th beta_th delta_th; *)
   abs_float res
 
 
