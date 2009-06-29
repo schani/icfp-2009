@@ -22,6 +22,7 @@ let initial_window_height = 800
 let pi = atan 1. *. 4.0
 let two_pi = pi *. 2.0
 let border = 1000.0
+let wheel_zoom_factor = 2.0
 
 let rgb_white =   1.0, 1.0, 1.0
 let rgb_red =     1.0, 0.0, 0.0
@@ -71,6 +72,12 @@ type space_screen = {
   mutable spaceview_width :float;  (* size of view currently displayed .. *)
   mutable spaceview_height :float; (* .. modified by zoom or gtk resize *)
 }
+
+let delete_traces = function () ->
+  our_history := [];
+  for i = 0 to 11 do
+    our_sats_histories.(i) <- [];
+  done
 
 (* convert spaceview coord into screen coord
  *)
@@ -179,7 +186,7 @@ let paint_diamond surface x y r =
   Cairo.stroke surface
 
 let paint_square surface x y r =
-  Cairo.rectangle surface (x -. r) (y -. r) r r;
+  Cairo.rectangle surface (x -. r) (y -. r) (r *. 2.0) (r *. 2.0);
   Cairo.stroke surface
 
 let paint_rect surface x1 y1 x2 y2 =
@@ -237,13 +244,21 @@ let show_debugstations ?(r=3.5) ?(color=rgb_orange) surface spasc debs =
 
 let show_earth surface spasc =
   set_color surface rgb_green;
-  paint_filled_circle surface (ccx spasc 0.0) (ccy spasc 0.0)
-    (vc spasc earth_r)
+  if spasc.zoom < 5000000.0 then
+    paint_circle surface (ccx spasc 0.0) (ccy spasc 0.0)
+      (vc spasc earth_r)
+  else
+    paint_filled_circle surface (ccx spasc 0.0) (ccy spasc 0.0)
+      (vc spasc earth_r)
 
 let show_moon surface spasc (x, y) =
   set_color surface rgb_yellow;
-  paint_filled_circle surface (ccx spasc x) (ccy spasc y)
-    (vc spasc moon_r)
+  if spasc.zoom < 5000000.0 then
+    paint_filled_circle surface (ccx spasc x) (ccy spasc y)
+      (vc spasc moon_r)
+  else
+    paint_filled_circle surface (ccx spasc x) (ccy spasc y)
+      (vc spasc moon_r)
 
 let show_rectzoomer surface spasc = function
     None -> ()
@@ -423,6 +438,7 @@ let make_orbit_window () =
     in let _ = GMisc.label ~text:"Goto:" ~packing:(hbox1#pack ~expand:false) ()
     in let goto_box = GEdit.entry ~max_length:50
 	~packing:(hbox1#pack ~expand:false) ()
+    in let remove_timeout = ref (fun () -> ())
     in
       make_menu_item "Noting" (fun _ -> the_tracker := TR_None);
       make_menu_item "Our Sat" (fun _ -> the_tracker := TR_OurSat);
@@ -430,17 +446,12 @@ let make_orbit_window () =
 	make_menu_item (sprintf "Sat %i" i) (fun _ -> the_tracker := TR_Sat i)
       done;
       ignore (sat_nr_toggler#connect#toggled ~callback:
-		(fun () -> show_sat_nr := sat_nr_toggler#active));
+		(fun () ->
+		   show_sat_nr := sat_nr_toggler#active;
+		   if not !playing then
+		     refresh_da da
+		));
       hbox3#pack ~expand:false !status_line#coerce;
-      ignore (goto_box#connect#activate
-		~callback:(fun () ->
-			     try
-			       do_goto := Some (int_of_string goto_box#text)
-			     with
-				 _ ->
-				   fprintf stderr "illegal goto line\n";
-				   flush stderr;
-				   do_goto := None));
       ignore (GMisc.label ~text:"" ~packing:(hbox3#pack ~expand:true) ());
       da#misc#realize ();
       let mousepos = GMisc.label ~text:"" ~packing:(hbox2#pack ~expand:false) ()
@@ -485,13 +496,28 @@ let make_orbit_window () =
 	  resize_screen spasc da_width da_height;
 	  refresh_da da;
 	  true
-    in let remove_timeout = ref (fun () -> ())
+    in let last_stamp = ref 0
     in let rec timeout_handler () =
 	if !playing then begin
 	  let stamp, score, fuel, x, y,
 	    orbits, sats, moons, fusts, debugs, rem =
-	    q.Vmbridge.step spasc.speed;
-	  in let rec record_more_traces ?(i=0) = function
+	    (match !do_goto with
+	       | Some goal when goal > !last_stamp ->
+		   let result = q.Vmbridge.step (goal - !last_stamp)
+		   in
+		     bplay#set_label "Play";
+		     playing := false;
+		     !remove_timeout ();
+		     do_goto := None;
+		     goto_box#set_text "";
+		     delete_traces ();
+		     result
+	       | _ ->
+		   q.Vmbridge.step spasc.speed
+	    );
+	  in
+	    last_stamp := stamp;
+	    let rec record_more_traces ?(i=0) = function
 		[] -> ()
 	    | (x, y) :: r ->
 		let old_x, old_y =
@@ -653,16 +679,49 @@ let make_orbit_window () =
 	     and mpy, unity = dist_human_readable mpy
 	  in
 	    mousepos#set_text
-	      (sprintf "Mouse at: %f%s, %f%s" mpx unitx mpy unity);
+	      (sprintf "Mouse at: %f%s, %f%s [%1f, [%1f] Zoomer=%f"
+		 mpx unitx mpy unity mx my spasc.zoom);
 	    false
        and scroll_callback ev =
-	match GdkEvent.get_type ev with
-	  | `SCROLL ->
-	      if GdkEvent.Scroll.direction ev = `UP then
-		zoomer#set_value (zoomer#value *. 2.0);
-	      if GdkEvent.Scroll.direction ev = `DOWN then
-		  zoomer#set_value (zoomer#value /. 2.0);
-	      true
+	  let mx = GdkEvent.Scroll.x ev
+	  and my = GdkEvent.Scroll.y ev
+	  in
+	    match GdkEvent.get_type ev with
+	      | `SCROLL ->
+		  if GdkEvent.Scroll.direction ev = `UP then begin
+		    (* zoom out *)
+		    zoomer#set_value (zoomer#value *. wheel_zoom_factor);
+		  end;
+		  if GdkEvent.Scroll.direction ev = `DOWN then begin
+		    (* zoom in *)
+		    zoomer#set_value (zoomer#value /. wheel_zoom_factor);
+		    recalculate_spaceview spasc;
+		    let mpx, mpy =
+		      ((spasc.spaceview_x +.
+			  (vc' spasc (mx -. (spasc.screen_width /. 2.0)))),
+		       (spasc.spaceview_y +.
+			  (vc' spasc (my -. (spasc.screen_height /. 2.0)))))
+		    in
+		      (*
+			let a, au = dist_human_readable spasc.spaceview_x
+			and b, ba = dist_human_readable spasc.spaceview_y
+			in
+			  printf "ZAZ: old center is %f%s, %f%s\n" a au b ba;
+			flush stdout;
+		      *)
+		      spasc.spaceview_x <- mpx;
+		      spasc.spaceview_y <- mpy; (*
+		      let a, au = dist_human_readable mpx
+		      and b, ba = dist_human_readable mpy
+		      in
+			printf
+			  "ZAZ: new center is %f%s, %f%s (mouse at %f, %f)\n"
+			  a au b ba mx my;*)
+			flush stdout;
+			recalculate_spaceview spasc;
+			refresh_da da;
+		  end;
+		  true
     in
       ignore (da#event#connect#expose ~callback:redraw_all);
       ignore (da#event#connect#button_press mbutton_callback);
@@ -681,12 +740,17 @@ let make_orbit_window () =
 		   spasc.spaceview_y <- 0.0;
 		   zoomer#set_value initial_zoom;
 		   refresh_da da));
-      ignore (deltraces_button#connect#clicked ~callback:
-		(function () ->
-		   our_history := [];
-		   for i = 0 to 11 do
-		     our_sats_histories.(i) <- [];
-		 done;));
+      ignore (deltraces_button#connect#clicked ~callback:delete_traces);
+      ignore (goto_box#connect#activate
+		~callback:(fun () ->
+			     try
+			       do_goto := Some (int_of_string goto_box#text);
+			       start_playing ();
+			       with
+				 _ ->
+				   fprintf stderr "illegal goto line\n";
+				   flush stderr;
+				   do_goto := None));
       let da_width, da_height = Gdk.Drawable.get_size (da#misc#window)
       in
 	resize_screen spasc da_width da_height;
