@@ -1048,7 +1048,7 @@ calc_ellipse_pos(vector_t apogee, vector_t perigee, double time)
     double e = m_eccentricity(dist_apogee, dist_perigee);
     double b = a * sqrt(1 - e*e);
 
-    double E = m_solve_ellipse_E(a, b, time, 0.001);
+    double E = m_solve_ellipse_E(a, b, time, 1e-9);
 
     double x = cos(E) * a;
     double y = sin(E) * b;
@@ -1585,6 +1585,11 @@ do_ellipse_follower (machine_state_t *state, ellipse_projection_t *proj, int tar
 
 	set_debugpoint(0, sat_pos);
 	set_debugpoint(1, our_pos);
+
+	if (v_abs(sat_speed) == 0.0) {
+	    do_n_timesteps(state, 1);
+	    continue;
+	}
 
 	if (v_abs(pos_diff) > ELLIPSE_FOLLOW_MIN_THRUST_RADIUS) {
 	    vector_t speed_diff = v_sub(sat_speed, our_speed);
