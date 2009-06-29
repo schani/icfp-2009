@@ -1,4 +1,5 @@
 open Vm
+open Vec
 
 type strat = 
     {
@@ -61,7 +62,7 @@ let aktuator =
     ignore(fuel,x,y,target);
     match m.timestep with
       | 2 -> 
-	  original_r := (Kurden_approximator.vec_length (posx,posy));
+	  original_r := (vec_length (posx,posy));
 	  strategy := run_hohmann (vm_read_sensor m 0x4);
 	  let m = vm_write_actuator m DeltaX (x !strategy.first_thrust)
 	  in
@@ -78,14 +79,14 @@ let aktuator =
 	    (abs_float (Hohmann.calculate_costs !original_r (vm_read_sensor m 4))) +.
 	      (abs_float (Hohmann.calculate_costs (vm_read_sensor m 4) !original_r))
 	  in
-	  Printf.printf "costs for one more %f = %f + %f \n" costs
+	  (* Printf.printf "costs for one more %f = %f + %f \n" costs
 	    (Hohmann.calculate_costs !original_r (vm_read_sensor m 4))
 	    (Hohmann.calculate_costs (vm_read_sensor m 4) !original_r)
-	  ; flush;
+	     ; flush stdout; *)
 	  if (fuel *. 0.95) > costs then
 	    (
 	      if (!original_r -. 
-		(Kurden_approximator.vec_length (posx,posy))) < 10.
+		(vec_length (posx,posy))) < 10.
 	      then
 		strategy := run_hohmann (vm_read_sensor m 0x4)
 	      else

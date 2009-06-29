@@ -64,7 +64,7 @@ let run_simulation osf_filename =
   in 
   let m = loop m framelist in
   let score = vm_read_sensor m 0 in
-  m.osf_closer m;
+  let m = m.osf_closer m in 
   Printf.printf "muhkuh scored: %f in move %d\n" score m.timestep;
   score;;
 

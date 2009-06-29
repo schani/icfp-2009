@@ -50,10 +50,13 @@ let bi_dritter_schub sx sy intermediateradius zielradius gguhrzeiger =
   let a2 = bi_semimajor_a2 zielradius intermediateradius in
   vektor (bi_delta_v3 zielradius a2) alpha;;
 
-let bi_zeitpunkt_mittelschub sx sy intermediateradius =
-  let startradius = radius sx sy in
+let bi_zeitpunkt_mittelschub_r startradius intermediateradius =
   let a1 = bi_semimajor_a1 startradius intermediateradius in
   bi_time_t a1;;  
+
+let bi_zeitpunkt_mittelschub sx sy intermediateradius =
+  let startradius = radius sx sy in
+  bi_zeitpunkt_mittelschub_r startradius intermediateradius
 
 let bi_zeitpunkt_endschub intermediateradius zielradius =
   let a2 = bi_semimajor_a2 zielradius intermediateradius in
@@ -95,3 +98,10 @@ let bielliptic sx1 sy1 sx2 sy2 zielradius inter =
       (length (bi_dritter_schub  (to_our sx2) (to_our sy2) inter zielradius rich))
     )
 );;
+
+let calculate_time start inter ziel = 
+  (bi_zeitpunkt_mittelschub_r start inter) +. (bi_zeitpunkt_endschub inter ziel)
+
+let bielliptic_rel (sx1,sy1) (sx2,sy2) zielradius inter = 
+  bielliptic sx1 sy1 sx2 sy2 zielradius inter
+    
