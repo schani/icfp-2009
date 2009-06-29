@@ -125,7 +125,8 @@ let aktuator =
     
     if (m.timestep < !strategy.timetotransfer) && (m.timestep >= 2)then (
       strategy := calc_transfer_strat m;
-      Printf.printf "strategy %d do nothing until %d\n" m.timestep !strategy.timetotransfer;
+      (* Printf.printf "strategy %d do nothing until %d\n" m.timestep
+	 !strategy.timetotransfer; *)
       vm_write_thrust m (0.,0.)
     ) else if (m.timestep >=2 ) && (not !strategy.transfer_active) then (
 	Printf.printf "comencing transfer \n"; 
@@ -138,7 +139,7 @@ let aktuator =
       else
 	match m.timestep with
 	  | step when step = !strategy.second_thrust_time ->
-	      Printf.printf "second thrust time reached\n"; 
+	      (* Printf.printf "second thrust time reached\n"; *)
 	      vm_write_thrust m !strategy.second_thrust
 	  | step when step > !strategy.second_thrust_time + 2 ->
 	      Kurden_approximator.follow m

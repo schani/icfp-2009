@@ -63,15 +63,24 @@ let bi_zweiterpunkt sx sy zielradius =
   let alpha = winkel sx sy in
   vektor zielradius alpha;;
 
+let calculate_costs start inter ziel = 
+  let a1 = bi_semimajor_a1 start inter in
+  let a2 = bi_semimajor_a2 ziel inter in
+  (abs_float (bi_delta_v1 start a1)) +. 
+    (abs_float (bi_delta_v2 inter a1 a2)) +.
+    (abs_float (bi_delta_v3 ziel a2))
+    
+(* let inter = ((length (sx1,sy1)) +. zielradius) /. 2.0 in *)
+
+
+
 (*
   (schub 1, schub 2, schub 3, time schub 2, time schub 3, expected meeting point, totalschub)
 
 *)
-
-let bielliptic sx1 sy1 sx2 sy2 zielradius =
+let bielliptic sx1 sy1 sx2 sy2 zielradius inter =
   let rich = richtung  (to_our sx1) (to_our sy1) (to_our sx2) (to_our
     sy2) in
-  let inter = zielradius *. 5.0 in 
   (* let inter = 268000000.0 in *)
   (
     
@@ -86,9 +95,3 @@ let bielliptic sx1 sy1 sx2 sy2 zielradius =
       (length (bi_dritter_schub  (to_our sx2) (to_our sy2) inter zielradius rich))
     )
 );;
-
-bielliptic (-6556995.342903) 7814.930000 (-6556981.371618) 15629.848899
-  42164000.000000;;
-
-hohmann (-6556995.342903) 7814.930000 (-6556981.371618) 15629.848899
-  42164000.000000;;

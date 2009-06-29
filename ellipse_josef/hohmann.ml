@@ -75,6 +75,9 @@ let th r1 r2 =
   ned tut
 *)
 
+let calculate_costs r1 r2 = 
+  (delta_v r1 r2) +. (delta_v_prime r1 r2)
+
 let erster_schub sx sy zielradius gguhrzeiger =
   let startradius = radius sx sy in
   let alpha = ((winkel sx sy) +. (gguhrzeiger *. (pi /. 2.0)))

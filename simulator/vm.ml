@@ -33,6 +33,8 @@ type machine_state =
       output_ports: float array;
       timestep: int;
       config: float;
+      osf_writer: machine_state -> machine_state;
+      osf_closer: machine_state -> machine_state;
     }
 
 let check_config problem = function
@@ -76,6 +78,8 @@ let alloc_machine problem memsize =
     output_ports = Array.make 0x66 0.;
     timestep = 0;
     config = 0.;
+    osf_writer = (fun m -> m);
+    osf_closer = (fun m -> m);
   }
 
 let exchange_inputs m = 
@@ -145,6 +149,8 @@ let insn_to_string m = function
 	(d_code_to_string d) a1 a2 
 	(read_data m a1) (read_data m a2)
   | No_Instruction -> "Moo-nop"
+
+
 
 let execute_one_instruction m = 
   let m,insn = fetch_insn m in
@@ -222,7 +228,7 @@ let vm_read_sat_pos m num =
 	(m.output_ports.(4), m.output_ports.(5))
     | ClearSky -> 
 	(m.output_ports.(3*num+0x7), m.output_ports.(3*num+0x8))
-    | _ -> failwith "there is not sat"
+    | _ -> failwith "there is no sat"
     
 let vm_read_sat_killed m num = 
   match m.problem with 
@@ -286,49 +292,60 @@ let vm_execute_n_steps n m =
 let vm_is_done m = 
   let ret =   (((vm_read_sensor m 0) <> 0.) || (m.timestep = 3000000)) in
   (* score written || 3M timesteps  -> eog *)
-  if ret then
-    Printf.fprintf stderr "we have reached the end of the world @ %d %f\n" m.timestep (vm_read_score m);
+  (* if ret then
+     Printf.fprintf stderr "we have reached the end of the world @ %d %f\n" m.timestep (vm_read_score m);*)
   ret
   
 
 let open_writer filname m = 
-  let oc = Basic_writer.open_submission filname m.teamnumber
-    (int_of_float m.config) in
-
-  let write_frame m = 
-    let diff = inputs_diff m in
-    let diff = 
-      if m.timestep <> 0 then
-	diff
-      else
-	(0x3E80,m.config)::diff
+  if m.outputfilename = "" then
+    m
+  else
+    let oc = Basic_writer.open_submission filname m.teamnumber
+      (int_of_float m.config) in
+    
+    let write_frame m = 
+      let diff = inputs_diff m in
+      let diff = 
+	if m.timestep <> 0 then
+	  diff
+	else
+	  (0x3E80,m.config)::diff
+      in
+      if diff <> [] then
+	Basic_writer.output_frame oc (m.timestep,diff);
+      exchange_inputs m;
     in
-    if diff <> [] then
-      Basic_writer.output_frame oc (m.timestep,diff);
-    exchange_inputs m;
-  in
-  let close_write m = 
-    Basic_writer.output_end_of_submission oc m.timestep;
-    Basic_writer.close_submission oc;
-    ()
-  in
-  write_frame,close_write
-
+    let close_write m = 
+      Basic_writer.output_end_of_submission oc m.timestep;
+      Basic_writer.close_submission oc;
+      {m with 
+	osf_writer = (fun m -> m);
+	osf_closer = (fun m -> m);
+      }
+    in
+    { m with 
+      osf_writer = write_frame;
+      osf_closer = close_write;
+    }
+      
 let vm_set_output_filename m name = 
   {m with outputfilename = name}
 
+let vm_execute_one_step_and_record m = 
+  let m = m.osf_writer m in
+  let m = vm_execute_one_step m in
+  if vm_is_done m then
+    m.osf_closer m
+  else
+    m
+
 let vm_execute m controller = 
-  let writer,closer = 
-    if m.outputfilename <> "" then
-      open_writer m.outputfilename m 
-    else
-      (fun m -> m),(fun m -> ())
-  in
+  let m = open_writer m.outputfilename m in
   let rec loop m = 
-    let m = writer m in
-    let m = vm_execute_one_step m in
+    let m = vm_execute_one_step_and_record m in
     if vm_is_done m then
-      (closer m; m)
+      m
     else
       loop (controller m)
   in
