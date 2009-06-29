@@ -16,7 +16,7 @@
 #define CIRCULAR_ECCENTRICITY_TOLERANCE	0.001
 #define MAX_DEBUGPOINTS			20
 #define EARTH_RADIUS			6.357e6
-#define CIRCULAR_ORBIT_THRESHOLD	50.0
+#define CIRCULAR_ORBIT_THRESHOLD	1000.0
 #define ELLIPSE_FOLLOW_MIN_THRUST_RADIUS	10.0
 
 typedef struct
@@ -799,10 +799,16 @@ distance_from_moon (machine_state_t *state)
 #endif
 
 static double
+get_angle_generic (machine_state_t *state, get_pos_func_t get_pos_func)
+{
+    vector_t pos = get_pos_func(state);
+    return v_angle(pos);
+}
+
+static double
 get_angle (machine_state_t *state)
 {
-    vector_t pos = get_pos(state);
-    return v_angle(pos);
+    return get_angle_generic(state, get_pos);
 }
 
 static void
@@ -842,9 +848,10 @@ between_angles (double angle, double a1, double a2, double max_diff)
 }
 
 static int
-timestep_until_angle (machine_state_t *state, double dest_angle, double max_dist, gboolean *have_angle)
+timestep_until_angle (machine_state_t *state, double dest_angle, double max_dist,
+		      get_pos_func_t get_pos_func, gboolean *have_angle)
 {
-    double old_angle = get_angle(state);
+    double old_angle = get_angle_generic(state, get_pos_func);
     int i = 0;
 
     for (;;) {
@@ -852,18 +859,18 @@ timestep_until_angle (machine_state_t *state, double dest_angle, double max_dist
 	set_thrust(state, v_zero);
 	++i;
 
-	if (distance_from_earth(state) >= max_dist) {
+	if (v_abs(get_pos_func(state)) >= max_dist) {
 	    if (have_angle != NULL)
 		*have_angle = FALSE;
 	    return i;
 	}
 
-	double new_angle = get_angle(state);
+	double new_angle = get_angle_generic(state, get_pos_func);
 
 	//g_print("%d %f %f %f %f\n", i, old_angle, new_angle, dest_angle, distance_from_earth(&copy));
 
 	if (between_angles(dest_angle, old_angle, new_angle, 0.2)) {
-	    g_print("at angle %f (dest angle %f) - dist %f\n", new_angle, dest_angle, distance_from_earth(state));
+	    g_print("at angle %f (dest angle %f) - dist %f\n", new_angle, dest_angle, v_abs(get_pos_func(state)));
 	    if (have_angle != NULL)
 		*have_angle = TRUE;
 	    return i;
@@ -890,12 +897,12 @@ timestep_until_angle_delta (machine_state_t *state, double angle_delta, double m
     g_assert(angle_delta >= 0.0);
 
     if (angle_delta > G_PI) {
-	num_steps += timestep_until_angle(state, a_norm(get_angle(state) + G_PI), max_dist, have_angle);
+	num_steps += timestep_until_angle(state, a_norm(get_angle(state) + G_PI), max_dist, get_pos, have_angle);
 	if (have_angle != NULL && !*have_angle)
 	    return num_steps;
     }
 
-    return num_steps + timestep_until_angle(state, dest_angle, max_dist, have_angle);
+    return num_steps + timestep_until_angle(state, dest_angle, max_dist, get_pos, have_angle);
 }
 
 static double
@@ -1633,6 +1640,19 @@ do_ellipse_follow_for_half_period (machine_state_t *state, ellipse_projection_t 
 }
 
 static void
+do_ellipse_follow_until_timestep (machine_state_t *state, ellipse_projection_t *proj, int target_timestep)
+{
+    double half_period = ellipse_projection_half_period(proj);
+    double divisor = 1000.0;
+    int step_size = 10;
+
+    do_ellipse_follower(state, proj, target_timestep,
+			constant_fuel_divisor_func, &divisor,
+			constant_skip_size_func, &step_size,
+			TRUE);
+}
+
+static void
 ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func)
 {
     double our_eccentricity, sat_eccentricity;
@@ -1791,37 +1811,26 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
 	    a_delta(v_angle(get_pos(state)), v_angle(get_norm_speed(state))) * 180.0 / G_PI,
 	    state->num_timesteps_executed - t0, tD);
 
-    double fuel_divisor = 100.0;
-    int skip_size = 30;
-    double radius = 500.0;
-
-    do_follower(state, get_pos_func,
-		constant_fuel_divisor_func, &fuel_divisor,
-		constant_skip_size_func, &skip_size,
-		is_within_radius, &radius,
-		FALSE);
-
-    /*
-    inject_elliptical_to_circular(state, c_dist < v_abs(sat_perigee) ? 1.0 : -1.0,
-				  v_abs(sat_perigee), WINNING_TIMESTEPS, 1.0);
-
     if (sat_eccentricity > CIRCULAR_ECCENTRICITY_TOLERANCE) {
+	ellipse_projection_t de_proj = make_ellipse_projection_with_other_distance(state, D, v_abs(D), NULL);
+	do_ellipse_follow_until_timestep(state, &de_proj, tE);
+
+	/*
 	num_iters = timestep_until_angle_delta(state, angle_between_apsises, v_abs(sat_perigee) * 1.1, &have_angle);
 	g_print("took %d timesteps for angle %f\n", num_iters, angle_between_apsises * 180.0 / G_PI);
 	g_assert(have_angle);
+	*/
 
 	// at E
 	g_print("### at E - distance %f (should be %f) direction %f  time %d (should be %d)\n",
 		distance_from_earth(state), v_abs(sat_perigee),
 		a_delta(v_angle(get_pos(state)), v_angle(get_norm_speed(state))) * 180.0 / G_PI,
 		state->num_timesteps_executed - t0, tE);
-
-	inject_elliptical_to_elliptical(state, v_abs(sat_apogee), 1.0);
+	//inject_elliptical_to_elliptical(state, v_abs(sat_apogee), 1.0);
     } else {
 	g_print("circular satellite orbit - finished at point D\n");
 	do_n_timesteps(state, 1);
-	}
-    */
+    }
 
     clear_dump_orbit();
     //set_debugpoint(0, v_zero);
@@ -1832,6 +1841,7 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
 static void
 ellipse_to_circular_transfer (machine_state_t *state)
 {
+    vector_t start_pos = get_pos(state);
     vector_t our_apogee, our_perigee;
     int t_to_our_apogee, t_to_our_perigee;
     double min, max;
@@ -1843,6 +1853,8 @@ ellipse_to_circular_transfer (machine_state_t *state)
 
     target = v_abs(get_pos(state));
 
+    set_debugpoint(0, get_pos(state));
+
     min = -v_abs(get_speed(state));
     max = state->output[1];
 
@@ -1850,7 +1862,7 @@ ellipse_to_circular_transfer (machine_state_t *state)
 	machine_state_t copy = *state;
 	double middle = (min + max) / 2;
 	vector_t thrust = v_mul_scal(get_norm_speed(&copy), middle);
-	double value;
+	double apogee_value, perigee_value;
 	double result;
 
 	set_thrust(&copy, thrust);
@@ -1860,19 +1872,25 @@ ellipse_to_circular_transfer (machine_state_t *state)
 	result = calc_ellipse_bertl(&copy, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee,
 				    get_pos, target * 1.5);
 
-	value = v_abs(our_apogee);
+	perigee_value = fabs(v_abs(our_perigee) - target);
+	apogee_value = fabs(v_abs(our_apogee) - target);
 
-	g_print("result %f value is %f - should be %f\n", result, value, target);
+	g_print("result %f apogee value is %f perigee is %f - should be 0\n", result, apogee_value, perigee_value);
 
-	if (result >= 0 && fabs(value - target) < CIRCULAR_ORBIT_THRESHOLD) {
+	if (result >= 0 && perigee_value < CIRCULAR_ORBIT_THRESHOLD && apogee_value < CIRCULAR_ORBIT_THRESHOLD) {
 	    set_thrust(state, thrust);
+	    g_print("done with ellipse to circular injection\n");
 	    return;
 	}
 
-	if (result >= 0 && value < target)
-	    min = middle;
-	else
+	if (result < 0)
 	    max = middle;
+	else {
+	    if (apogee_value < perigee_value)
+		min = middle;
+	    else
+		max = middle;
+	}
     }
 
     g_assert_not_reached();
@@ -1901,6 +1919,27 @@ transfer_to_circular_target (machine_state_t *state, double target)
 
     ellipse_to_circular_transfer(state);
     do_n_timesteps(state, 1);
+}
+
+static void
+circular_transfer_to_meet_and_greet (machine_state_t *state, get_pos_func_t get_pos_func)
+{
+    machine_state_t copy;
+    vector_t sat_apogee, sat_perigee;
+    int t_to_sat_apogee, t_to_sat_perigee;
+    vector_t our_apogee, our_perigee;
+    int t_to_our_apogee, t_to_our_perigee;
+    gboolean have_angle;
+
+    calc_ellipse_bertl(state, &sat_apogee, &sat_perigee, &t_to_sat_apogee, &t_to_sat_perigee, get_pos_func, -1);
+    transfer_to_circular_target(state, v_abs(sat_apogee));
+
+    calc_ellipse_bertl(state, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee, get_pos, -1);
+    do_n_timesteps(state, MIN(t_to_our_perigee, t_to_our_apogee));
+
+    copy = *state;
+    timestep_until_angle(&copy, v_angle(get_pos(state)), v_abs(sat_apogee) * 1.1, get_pos_func, &have_angle);
+    g_assert(have_angle);
 }
 
 static void
@@ -2116,6 +2155,9 @@ main (int argc, char *argv[])
 
 #elif defined(BIN2) || defined(BIN3)
 
+    circular_transfer_to_meet_and_greet(&global_state, get_meet_greet_sat_pos);
+
+    /*
     ellipse_to_ellipse_transfer(&global_state, get_meet_greet_sat_pos);
     g_print("done\n");
 
@@ -2124,6 +2166,7 @@ main (int argc, char *argv[])
 #else
     do_bertl_search(&global_state);
 #endif
+    */
 
 #elif defined(BIN4)
 
@@ -2196,7 +2239,7 @@ main (int argc, char *argv[])
     double divisor = 10.0;
     int step_size = 7;
 
-    for (sat = 0; sat < 1; ++sat) {
+    for (sat = 0; sat < 9; ++sat) {
 	g_assert(!get_sat_n_collected(&global_state, sat));
 
 	g_print("trying to hit sat %d\n", sat);
