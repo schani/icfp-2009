@@ -9,7 +9,12 @@ let get_aktuator = function
       | `Hohmann ->  Solve_hohman.aktuator)
   | Vm.MeetAndGreet -> Solve_meetandgreet.aktuator
   | Vm.Eccentric -> Solve_eccentric.aktuator
-  | _ -> (fun x -> x)
+  | _ -> (fun x -> 
+      
+      ignore(Printf.printf "final points %f\n" (-2.); flush stdout);
+      exit 0;
+      x
+    )
 
 let get_configs = function
   | Vm.Hohmann -> [1002] (* ;1002;1003;1004] *)
