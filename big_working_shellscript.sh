@@ -71,12 +71,12 @@ for problem in 1 2 3 4; do
     then
       #schani war besser
       echo "therefore, using schani's solution for ${problem}00${scenario}. (sorry baerli ;( )"
-      tar -C $EMPTRACEOUTPUTDIR -jcf ${problem}00${scenario}.$SCHANIPOINTS.schani.emp.tar.bz2 $TMPDIR/${problem}00${scenario}.schani.emp &> /dev/null
+      tar -C $TMPDIR -jcf $EMPTRACEOUTPUTDIR/${problem}00${scenario}.$SCHANIPOINTS.schani.emp.tar.bz2 ${problem}00${scenario}.schani.emp &> /dev/null
       mv $TMPDIR/${problem}00${scenario}.schani.osf $BINTRACEOUTPUTDIR/${problem}00${scenario}.$SCHANIPOINTS.schani.osf 
     else
       #baerli war besser
       echo "therefore, using baerli's solution for ${problem}00${scenario}. (sorry schani ;( )"
-      tar -C $EMPTRACEOUTPUTDIR -jcf ${problem}00${scenario}.$BAERLIPOINTS.baerli.emp.tar.bz2 $TMPDIR/${problem}00${scenario}.baerli.emp &> /dev/null
+      tar -C $TMPDIR -jcf $EMPTRACEOUTPUTDIR/${problem}00${scenario}.$BAERLIPOINTS.baerli.emp.tar.bz2 ${problem}00${scenario}.baerli.emp &> /dev/null
       mv $TMPDIR/${problem}00${scenario}.baerli.osf $BINTRACEOUTPUTDIR/${problem}00${scenario}.$BAERLIPOINTS.baerli.osf
     fi
     # clean up tmpdir
