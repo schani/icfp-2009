@@ -1,3 +1,26 @@
+let vec_minus (x1,y1) (x2,y2) =
+  ((x1 -. x2),(y1 -. y2));;
+
+let vec_add (x1,y1) (x2,y2) =
+  ((x2 +. x1),(y2 +. y1));;
+
+
+let vec_scalar_mult s (x,y) = 
+  (s*.x,s*.y)
+
+let vec_length (x,y) = 
+  sqrt (x*.x+.y*.y)
+
+let vec_square_length (x,y) = 
+  (x*.x+.y*.y)
+  
+let vec_scale_to len vec = 
+  vec_scalar_mult (len/.(vec_length vec)) vec 
+
+let vec_neg (x,y) = 
+  ((-.x),(-.y))
+
+
 let get_steigung (x1,y1) (x2,y2) =
   (y2 -. y1) /. (x2 -. x1);;
 
@@ -44,7 +67,7 @@ let get_symmetrale  p1 p2 p3 q1 q2 q3 =
   ellipsenmittelpunkt
 *)
 
-let get_mittelpunkt  p1 p2 p3 q1 q2 q3 r1 r2 r3 =
+let get_mittelpunkt  (p1,p2,p3) (q1,q2,q3) (r1,r2,r3) =
   get_schnittpunkt 
     (get_symmetrale p1 p2 p3 q1 q2 q3)
     (get_symmetrale  q1 q2 q3 r1 r2 r3)
@@ -60,3 +83,23 @@ let get_punkt r winkel =
   let bogen =  pi *. winkel /. 180.0 in
   (r *. (cos bogen) , r *. (sin bogen) );;
 
+(* we are geocentric here! *)
+let calculate_perige points1 point2 points3 = 
+  let p1,_,_ = points1 in
+  let mittel = get_mittelpunkt points1 point2 points3 in
+  let brenn2 = vec_add mittel mittel in
+  let r1 = vec_length p1 in
+  let r2 = vec_length (vec_minus brenn2 p1) in
+  let ee = vec_length brenn2 in
+  let rp = r1 +. r2 -. ee in
+  let perige = vec_scale_to rp (vec_neg brenn2) in
+  perige
+
+let calculate_period points1 points2 points3 = 
+  let perige = calculate_perige points1 points2 points3 in
+  let mittel = get_mittelpunkt points1 points2 points3 in
+  let a = vec_length (vec_add perige mittel) in
+  let t = 2.*.pi*.sqrt(a*.a*.a/.Hohmann.mu) in
+  t
+
+  
