@@ -689,6 +689,48 @@ m_is_moon_orbiter(double d_earth, double d_moon)
 }
 
 
+/* calc ellipse position at time T */
+
+double
+m_solve_ellipse_E(double a, double b, double T, double precision)
+{
+    double P = m_period(a);
+    double e = sqrt(1 - (b * b) / (a * a));
+    double n = 2 * G_PI / P;
+    double M = n * T;
+    
+    double interval[2] = { 0, 2 * G_PI };
+    double E = -1;
+    double val;
+
+    do {
+	E = (interval[0] + interval[1])/2.0;
+	val = E - e * sin(E);
+	
+	if (val < M) {
+	    interval[0] = E;
+	} else {
+	    interval[1] = E;
+	}
+    } while (fabs(M - val) > precision);
+    return E;
+}
+
+double
+m_solve_ellipse(double a, double b, double T, double precision)
+{
+    double e = sqrt(1 - (b * b) / (a * a));
+    double E = m_solve_ellipse_E(a, b, T, precision);
+
+    double r = a * (1 - e * cos(E));
+    double tv = sqrt((1 + e)/(1 - e)) * tan(E / 2.0);
+    double v = atan(tv) * 2.0;
+
+    return v;
+}
+
+
+
 
 static vector_t
 get_norm_speed (machine_state_t *state)
@@ -976,6 +1018,28 @@ calc_ellipse_bertl(machine_state_t *state, vector_t *apogee, vector_t *perigee,
 	
     return m_eccentricity(v_abs(max_pos), v_abs(min_pos));
 }
+
+static vector_t
+calc_ellipse_pos(vector_t apogee, vector_t perigee, double time)
+{
+    double dist_apogee = v_abs(apogee);
+    double dist_perigee = v_abs(perigee);
+
+    double a = m_semi_major(dist_apogee, dist_perigee);
+    double e = m_eccentricity(dist_apogee, dist_perigee);
+    double b = a * sqrt(1 - e*e);
+
+    double E = m_solve_ellipse_E(a, b, time, 0.001);
+
+    double x = cos(E) * a;
+    double y = sin(E) * b;
+    
+    vector_t center = v_mul_scal(v_add(apogee, perigee), 0.5);
+    vector_t res = { x, y };
+
+    return (v_rotate(v_add(res, center), v_angle(apogee)));
+}
+
 
 #ifdef BIN4
 static gboolean
