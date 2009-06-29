@@ -1282,16 +1282,14 @@ ellipse_to_ellipse_transfer (machine_state_t *state, get_pos_func_t get_pos_func
 	if (T >= t34_min) {
 	    g_print("trying bertl solve with a = %f  b = %f  T = %f  (n=%d)\n", a, b, T, i);
 
-	    /*
 	    if (T - t34_min >= our_period) {
 		int num_revolutions = (int)floor((T - t34_min) / our_period);
-		num_b_revolution_steps = (int)floor(our_period) * num_revolutions;
+		num_B_revolution_steps = (int)floor(our_period * num_revolutions);
 		g_print("T is more than our period - doing %d revolutions\n", num_revolutions);
-		do_n_timesteps(state, num_b_revolution_steps);
-		T -= num_b_revolution_steps;
+		do_n_timesteps(state, num_B_revolution_steps);
+		T -= num_B_revolution_steps;
 		g_assert(T >= t34_min);
 	    }
-	    */
 
 	    h = m_solve_t3t4(a, b, T, 0.5);
 	    g_assert(h >= h_min);
