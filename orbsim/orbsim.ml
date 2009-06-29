@@ -367,6 +367,7 @@ let make_orbit_window () =
   in let hbox1 = GPack.hbox ~packing:(vbox#pack ~expand:false) ()
   in let hbox2 = GPack.hbox ~packing:(vbox#pack ~expand:false) ()
   in let hbox3 = GPack.hbox ~packing:(vbox#pack ~expand:false) ()
+  in let hbox4 = GPack.hbox ~packing:(vbox#pack ~expand:false) ()
   in let bplay = GButton.button ~label:"Play" ~packing:hbox1#pack ()
   in let _ = GMisc.label ~text:"Zoom:"
       ~packing:(hbox1#pack ~expand:false) ()
@@ -435,9 +436,13 @@ let make_orbit_window () =
 	  ignore (item#connect#activate ~callback)
     in let sat_nr_toggler = GButton.check_button ~label:"Sat #" ~active:true
 	~packing:(hbox1#pack ~expand:false) ()
-    in let _ = GMisc.label ~text:"Goto:" ~packing:(hbox1#pack ~expand:false) ()
-    in let goto_box = GEdit.entry ~max_length:50
-	~packing:(hbox1#pack ~expand:false) ()
+    in let _ = GMisc.label ~text:"Goto:" ~packing:(hbox2#pack ~expand:false) ()
+    in let goto_box = GEdit.entry ~max_length:12
+	~packing:(hbox2#pack ~expand:false) ()
+    in let bookmark_button = GButton.button ~label:"Bookmark:"
+	~packing:(hbox2#pack ~expand:false) ()
+    in let bookmark_box = GEdit.entry ~max_length:100
+	~packing:(hbox2#pack ~expand:false) ()
     in let remove_timeout = ref (fun () -> ())
     in
       make_menu_item "Noting" (fun _ -> the_tracker := TR_None);
@@ -451,10 +456,10 @@ let make_orbit_window () =
 		   if not !playing then
 		     refresh_da da
 		));
-      hbox3#pack ~expand:false !status_line#coerce;
-      ignore (GMisc.label ~text:"" ~packing:(hbox3#pack ~expand:true) ());
+      hbox4#pack ~expand:false !status_line#coerce;
+      ignore (GMisc.label ~text:"" ~packing:(hbox4#pack ~expand:true) ());
       da#misc#realize ();
-      let mousepos = GMisc.label ~text:"" ~packing:(hbox2#pack ~expand:false) ()
+      let mousepos = GMisc.label ~text:"" ~packing:(hbox3#pack ~expand:false) ()
       in let q = if Array.length Sys.argv > 1 then
 	  Vmbridge.setup_file Sys.argv.(1)
 	else
@@ -751,6 +756,29 @@ let make_orbit_window () =
 				   fprintf stderr "illegal goto line\n";
 				   flush stderr;
 				   do_goto := None));
+      ignore (bookmark_button#connect#clicked ~callback:
+		(fun () ->
+		   let s = sprintf "orbsim://%f:%i:%f:%f"
+		     spasc.zoom spasc.speed spasc.spaceview_x spasc.spaceview_y
+		   in
+		     bookmark_box#set_text s));
+      ignore (bookmark_box#connect#activate ~callback:
+		(fun () ->
+		   try
+		     Scanf.sscanf bookmark_box#text "orbsim://%f:%i:%f:%f"
+		       (fun zoom speed svx svy -> begin
+			  spasc.zoom <- zoom;
+			  spasc.speed <- speed;
+			  spasc.spaceview_x <- svx;
+			  spasc.spaceview_y <- svy;
+			end);
+		     recalculate_spaceview spasc;
+		     refresh_da da;
+	             bookmark_box#set_text ""
+		   with
+		       _ ->
+			 fprintf stderr "illegal bookmark\n";
+			 flush stderr));
       let da_width, da_height = Gdk.Drawable.get_size (da#misc#window)
       in
 	resize_screen spasc da_width da_height;
