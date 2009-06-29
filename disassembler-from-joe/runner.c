@@ -20,6 +20,7 @@ typedef struct
 } vector_t;
 
 static vector_t v_sub (vector_t a, vector_t b);
+static vector_t v_add (vector_t a, vector_t b);
 static double v_abs (vector_t v);
 
 static const vector_t v_zero = { 0.0, 0.0 };
@@ -303,6 +304,27 @@ get_get_sat_pos_func (int n)
     g_assert(n >= 0 && n < 11);
     return get_sat_pos_funcs[n];
 }
+
+static vector_t
+get_rel_moon_pos (machine_state_t *state)
+{
+    vector_t v;
+
+    v.x = state->output[0x64];
+    v.y = state->output[0x65];
+
+    return v;
+}
+
+static vector_t
+get_moon_pos (machine_state_t *state)
+{
+    vector_t pos = get_pos(state);
+    vector_t rel = get_rel_moon_pos(state);
+
+    return v_add(pos, rel);
+}
+
 #else
 #error bla
 #endif
@@ -460,15 +482,40 @@ v_rotate (vector_t v, double angle)
 /* MATH STUFF */
 
 #define	SIM_G	6.67428e-11
-#define SIM_M	6.0e+24
-#define SIM_R	6.357e+6
 
-#define SIM_mu	(SIM_G*SIM_M)
+#define SIM_R_EARTH	6.357e+6
+#define SIM_M_EARTH	6.0e+24
+
+#define SIM_R_MOON	1.738e+6
+#define SIM_M_MOON	7.347e+22
+
+#define SIM_mu_EARTH	(SIM_G*SIM_M_EARTH)
+#define SIM_mu_MOON	(SIM_G*SIM_M_MOON)
+
+
+static double
+m_force(double dist, double mass)
+{
+    return (-SIM_G * mass) / (dist * dist);
+}
+
+static double
+m_force_earth(double dist)
+{
+    return m_force(dist, SIM_M_EARTH);
+}
+
+static double
+m_force_moon(double dist)
+{
+    return m_force(dist, SIM_M_MOON);
+}
+
 
 static double
 m_period(double semi_major)
 {
-    return 2.0*G_PI * sqrt((semi_major * semi_major * semi_major) / SIM_mu);
+    return 2.0*G_PI * sqrt((semi_major * semi_major * semi_major) / SIM_mu_EARTH);
 }
 
 static double
@@ -476,6 +523,20 @@ m_half_period(double semi_major)
 {
     return m_period(semi_major)/2;
 }
+
+static double
+m_period_moon(double semi_major)
+{
+    return 2.0*G_PI * sqrt((semi_major * semi_major * semi_major) / SIM_mu_MOON);
+}
+
+static double
+m_half_period_moon(double semi_major)
+{
+    return m_period(semi_major)/2;
+}
+
+
 
 static double
 m_focal_dist(double apoapsis, double periapsis)
@@ -502,6 +563,8 @@ m_eccentricity(double apoapsis, double periapsis)
 }
 
 
+
+
 /* solve T3+T4 numerically */
 
 static double
@@ -522,6 +585,16 @@ m_solve_t3t4(double a, double b, double T, double precision)
     } while (fabs(T - val) > precision);
     return h;
 }
+
+
+/* ccheck for earth/moon orbit */
+
+static gboolean
+m_is_moon_orbiter(double d_earth, double d_moon)
+{
+    return m_force_moon(d_moon) > m_force_earth(d_earth);
+}
+
 
 
 static vector_t
@@ -565,6 +638,14 @@ distance_from_earth (machine_state_t *state)
 {
     return v_abs(get_pos(state));
 }
+
+#ifdef BIN4
+static double
+distance_from_moon (machine_state_t *state)
+{
+    return v_abs(get_rel_moon_pos(state));
+}
+#endif
 
 static double
 get_angle (machine_state_t *state)
@@ -794,6 +875,15 @@ calc_ellipse_bertl(machine_state_t *state, vector_t *apogee, vector_t *perigee,
 	*t_to_perigee = min_iter;
 }
 
+#ifdef BIN4
+static gboolean
+is_moon_orbiter(machine_state_t *state)
+{
+    double d_earth = distance_from_earth(state);
+    double d_moon = distance_from_moon(state);
+    return m_is_moon_orbiter(d_earth, d_moon);
+}
+#endif
 
 static int
 inject_elliptical_to_elliptical (machine_state_t *state, double dest_apogee, double tolerance)
