@@ -36,7 +36,6 @@ typedef void (*set_new_value_func_t) (guint32 addr, double new_value, gpointer u
 #include "bin3.c"
 #elif defined(BIN4)
 #include "bin4.c"
-#define SCENARIO 4001
 #else
 #error bla
 #endif
@@ -148,6 +147,7 @@ set_debug_point (vector_t p)
     debug_point = p;
 }
 
+
 /* Format of dump file:
  *
  * <time> <score> <fuel> <our-x> <our-y>
@@ -166,11 +166,30 @@ print_timestep (machine_state_t *state)
 {
     double sx = -state->output[2];
     double sy = -state->output[3];
+    int count_debugpoints = 1;
+    
+    if ((debug_point.x == 0.0) && (debug_point.y == 0.0)){
+    	count_debugpoints = 0;
+    }
 
-    if (dump_file != NULL)
-	fprintf(dump_file, "%d %f %f %f %f 1 0 0 %f %f\n", state->num_timesteps_executed,
-		state->output[0], state->output[1],
-		sx, sy, state->output[4], sqrt(sx * sx + sy * sy));
+    if (dump_file != NULL){
+    	//general
+		fprintf(dump_file, "%d %f %f %f %f ",
+			state->num_timesteps_executed, state->output[0], state->output[1], sx, sy);
+		//counts
+		fprintf(dump_file, "1 0 0 0 %d ", count_debugpoints);
+		//orbits 
+		fprintf(dump_file, "%f " ,state->output[4]);
+		//satellites
+		//moons
+		//fueling stations
+		//debug point (if there is one)
+		if (count_debugpoints != 0)
+			fprintf(dump_file, "%f %f ", debug_point.x, debug_point.y);
+		//comment (distance)
+		fprintf(dump_file, "%f\n", sqrt(sx * sx + sy * sy));
+    }
+
 }
 #elif defined(BIN2) || defined(BIN3)
 static void
@@ -181,17 +200,31 @@ print_timestep (machine_state_t *state)
 
     double dx = state->output[4];
     double dy = state->output[5];
+    
+    int count_debugpoints = 1;
+    
+    if ((debug_point.x == 0.0) && (debug_point.y == 0.0)){
+    	count_debugpoints = 0;
+    }    
 
     if (dump_file != NULL) {
-	fprintf(dump_file, "%d %f %f %f %f %d 1 0 0 1 ", state->num_timesteps_executed,
-		state->output[0], state->output[1],
-		sx, sy, dump_orbit <= 0.0 ? 0 : 1);
-	if (dump_orbit > 0.0)
-	    fprintf(dump_file, "%f ", dump_orbit);
-	fprintf(dump_file, "%f %f %f %f %f\n",
-		sx + dx, sy + dy,
-		debug_point.x, debug_point.y,
-		sqrt(sx * sx + sy * sy));
+    	//general
+		fprintf(dump_file, "%d %f %f %f %f ", state->num_timesteps_executed,
+			state->output[0], state->output[1],	sx, sy); 
+		//counts
+		fprintf(dump_file, "%d 1 0 0 %d ", dump_orbit <= 0.0 ? 0 : 1, count_debugpoints);
+		//orbits
+		if (dump_orbit > 0.0)
+		    fprintf(dump_file, "%f ", dump_orbit);
+		//satellites
+		fprintf(dump_file, "%f %f ", sx + dx, sy + dy);
+		//moons
+		//fueling stations
+		//debug point (if there is one)	
+		if (count_debugpoints != 0)
+			fprintf(dump_file, "%f %f ", debug_point.x, debug_point.y);
+		//comment (distance)	 
+	 	fprintf(dump_file, "%f\n", sqrt(sx * sx + sy * sy));
     }
 }
 
@@ -208,9 +241,6 @@ get_meet_greet_sat_pos (machine_state_t *state)
     return v;
 }
 #elif defined(BIN4)
-/*
- * because the lack of visualization support of fuel stations it is handled as moon 2 ;)
- */
 
 static void
 print_timestep (machine_state_t *state)
@@ -226,20 +256,38 @@ print_timestep (machine_state_t *state)
     double moonx = state->output[0x64];
     double moony = state->output[0x65];
 
+    int count_debugpoints = 1;
+    
+    if ((debug_point.x == 0.0) && (debug_point.y == 0.0)){
+    	count_debugpoints = 0;
+    }    
 
     
     if (dump_file != NULL) {
-        fprintf(dump_file, "%d %f %f %f %f 0 %d 1 1 1 ", state->num_timesteps_executed, state->output[0], state->output[1],
-                sx, sy, max_sat);
-	for (int i=0; i<max_sat; ++i){
-		double dx = state->output[3*i+7];
-                double dy = state->output[3*i+8];
-		fprintf(dump_file, "%f %f ", sx + dx, sy + dy);
-	}
-        fprintf(dump_file, "%f %f %f %f %f %f\n",
-		sx + moonx, sy + moony,
-		sx + fuelx, sy + fuely,
-		debug_point.x, debug_point.y);
+    	//general
+		fprintf(dump_file, "%d %f %f %f %f ", state->num_timesteps_executed,
+			state->output[0], state->output[1],	sx, sy); 
+		//counts
+		fprintf(dump_file, "%d %d 1 1 %d ", dump_orbit <= 0.0 ? 0 : 1,
+			max_sat, count_debugpoints);
+		//orbits
+		if (dump_orbit > 0.0)
+		    fprintf(dump_file, "%f ", dump_orbit);
+		//satellites
+		for (int i=0; i<max_sat; ++i){
+			double dx = state->output[3*i+7];
+        	double dy = state->output[3*i+8];
+			fprintf(dump_file, "%f %f ", sx + dx, sy + dy);
+		}
+		//moon
+		fprintf(dump_file, "%f %f ", sx + moonx, sy + moony); 
+		//fueling station
+		fprintf(dump_file, "%f %f ", sx + fuelx, sy + fuely); 
+		//debug point (if there is one)	
+		if (count_debugpoints != 0)
+			fprintf(dump_file, "%f %f ", debug_point.x, debug_point.y);
+		//comment	 
+	 	fprintf(dump_file, "\n");
     }
 }   
 
