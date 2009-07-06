@@ -35,3 +35,6 @@ bin4.c : disassembler.py
 
 t34test : t34test.c
 	gcc -Wall -O3 -lm -o t34test t34test.c
+
+clean :
+	rm -f bin[1234].asm bin[1234].c runner[1234]
