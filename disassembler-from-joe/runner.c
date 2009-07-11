@@ -2056,6 +2056,7 @@ main (int argc, char *argv[])
     int num_iters, i;
     double dest_apogee;
     gboolean have_angle = FALSE;
+    gboolean run_only = FALSE;
     char *global_trace_name = NULL;
     int opt;
     int scenario = -1;
@@ -2065,7 +2066,7 @@ main (int argc, char *argv[])
 
     //fesetround(FE_TOWARDZERO);
 
-    while ((opt = getopt(argc, argv, "d:i:t:s:")) != -1) {
+    while ((opt = getopt(argc, argv, "d:i:t:s:r")) != -1) {
 	switch (opt) {
 	    case 'd' :
 		dump_file = fopen(optarg, "w");
@@ -2123,6 +2124,12 @@ main (int argc, char *argv[])
     global_state.inputs.input_16000 = scenario;
 
     global_timestep();
+
+    if (run_only) {
+	while (global_state.num_timesteps_executed < 3000000)
+	    do_timestep(&global_state);
+	return 0;
+    }
 
 #if defined(BIN1)
 
