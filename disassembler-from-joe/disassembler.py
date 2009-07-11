@@ -300,7 +300,6 @@ class Compiler (CodeCollector):
 			print 'public void setInput (int port, double value) {'
 			for input in self.inputs:
 				print 'if (port == %d) input_%d = value;' % (input, input)
-			print 'else throw new Exception("invalid input port");'
 			print '}'
 
 		if self.language == 'C':
@@ -312,6 +311,7 @@ class Compiler (CodeCollector):
 			print 'double output[%d];' % (self.port_max+1)
 		else:
 			print 'double output[];'
+			print 'public double getOutput (int port) { return output[port]; }'
 		print 'int num_timesteps_executed;'
 
 		if self.language == 'C':
@@ -409,6 +409,7 @@ class Compiler (CodeCollector):
 
 	def finish(self):
 		if self.language == 'Java':
+			print 'package at.ac.tuwien.complang.icfp2009;'
 			print 'public class Machine {'
 		self.gen_struct()
 		self.gen_inits()
