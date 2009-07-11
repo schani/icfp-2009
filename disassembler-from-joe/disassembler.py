@@ -264,9 +264,16 @@ class Decompiler (CodeCollector):
 		self.build_uses()
 		self.decompile()
 
-class CGenerator (CodeCollector):
-	def __init__(self):
+class Compiler (CodeCollector):
+	def __init__(self, language):
 		CodeCollector.__init__(self)
+		self.language = language
+		if language == 'C':
+			self.state_prefix = 'state->'
+		elif language == 'Java':
+			self.state_prefix = ''
+		else:
+			raise Exception('Unsupported target language %s' % language)
 
 	def gen_struct(self):
 		self.port_max = -1
@@ -283,55 +290,92 @@ class CGenerator (CodeCollector):
 			else:
 				self.vars.add(addr)
 
-		print 'typedef struct {'
+		if self.language == 'C':
+			print 'typedef struct {'
 		for input in self.inputs:
 			print 'double input_%d;' % input
-		print '} machine_inputs_t;'
+		if self.language == 'C':
+			print '} machine_inputs_t;'
+		else:
+			print 'public void setInput (int port, double value) {'
+			for input in self.inputs:
+				print 'if (port == %d) input_%d = value;' % (input, input)
+			print 'else throw new Exception("invalid input port");'
+			print '}'
 
-		print 'typedef struct {'
+		if self.language == 'C':
+			print 'typedef struct {'
+
 		for addr in self.vars:
 			print 'double %s;' % var_name(addr)
-		print 'double output[%d];' % (self.port_max+1)
-		print 'machine_inputs_t inputs;'
+		if self.language == 'C':
+			print 'double output[%d];' % (self.port_max+1)
+		else:
+			print 'double output[];'
 		print 'int num_timesteps_executed;'
-		print '} machine_state_t;'
 
-		print 'void compare_inputs (machine_inputs_t *old, machine_inputs_t *new, compare_init_func_t init, set_new_value_func_t set, gpointer user_data) {'
-		print 'guint32 count = 0;'
-		for input in self.inputs:
-			print 'if (old->input_%d != new->input_%d) ++count;' % (input, input)
-		print 'init(count, user_data);'
-		for input in self.inputs:
-			print 'if (old->input_%d != new->input_%d) set(%d, new->input_%d, user_data);' % (input, input, input, input)
-		print '}'
+		if self.language == 'C':
+			print 'machine_inputs_t inputs;'
+			print '} machine_state_t;'
+
+			print 'void compare_inputs (machine_inputs_t *old, machine_inputs_t *new, compare_init_func_t init, set_new_value_func_t set, gpointer user_data) {'
+			print 'guint32 count = 0;'
+			for input in self.inputs:
+				print 'if (old->input_%d != new->input_%d) ++count;' % (input, input)
+			print 'init(count, user_data);'
+			for input in self.inputs:
+				print 'if (old->input_%d != new->input_%d) set(%d, new->input_%d, user_data);' % (input, input, input, input)
+			print '}'
+
+	def input_var(self, input):
+		if self.language == 'C':
+			return 'state->inputs.input_%d' % input
+		else:
+			return 'input_%d' % input
+
+	def mem_var(self, addr):
+		if self.language == 'C':
+			return 'state->%s' % var_name(addr)
+		else:
+			return var_name(addr)
 
 	def gen_inits(self):
-		print 'void init_machine (machine_state_t *state) {'
-		for addr in self.vars:
-			print 'unsigned char %s_mem[] = {' % var_name(addr)
-			for c in struct.pack("d", self.mem[addr]):
-				print '0x%02X,' % ord(c)
-			print '};'
-			print 'state->%s = *(double*)%s_mem;' % (var_name(addr), var_name(addr))
+		if self.language == 'C':
+			print 'void init_machine (machine_state_t *state) {'
+			for addr in self.vars:
+				print 'unsigned char %s_mem[] = {' % var_name(addr)
+				for c in struct.pack("d", self.mem[addr]):
+					print '0x%02X,' % ord(c)
+				print '};'
+				print 'state->%s = *(double*)%s_mem;' % (var_name(addr), var_name(addr))
+		else:
+			print 'public Machine () {'
+			for addr in self.vars:
+				print '%s = Double.longBitsToDouble' % var_name(addr),
+				print '(0x%02X%02X%02X%02X%02X%02X%02X%02XL);' % tuple(map(ord,reversed(struct.pack("d", self.mem[addr]))))
+			print 'output = new double[%d];' % (self.port_max+1)
 		for input in self.inputs:
-			print 'state->inputs.input_%d = 0.0;' % input
-		print 'for (int i = 0; i < %d; ++i) state->output[i] = 0.0;' % (self.port_max+1)
-		print 'state->num_timesteps_executed = 0;'
+			print '%s = 0.0;' % self.input_var(input)
+		print 'for (int i = 0; i < %d; ++i) %soutput[i] = 0.0;' % (self.port_max+1, self.state_prefix)
+		print '%snum_timesteps_executed = 0;' % self.state_prefix
 		print '}'
 
 	def gen_loop(self):
-		print 'void timestep (machine_state_t *state) {'
+		if self.language == 'C':
+			print 'void timestep (machine_state_t *state) {'
+		else:
+			print 'public void timestep () {'
 		addr = 0
 		while addr < len(self.code):
 			op = self.code[addr]
 			#print 'decompiling insn %d: %s' % (addr, op)
 			if op[0] == 'alu':
 				if op[1] == 'div':
-					print 'state->%s = (state->%s == 0.0) ? 0.0 : (state->%s / state->%s);' % (var_name(addr), var_name(op[3]), var_name(op[2]), var_name(op[3]))
+					print '%s = (%s == 0.0) ? 0.0 : (%s / %s);' % (self.mem_var(addr), self.mem_var(op[3]), self.mem_var(op[2]), self.mem_var(op[3]))
 				else:
-					print 'state->%s = state->%s %s state->%s;' % (var_name(addr), var_name(op[2]), alu_op_symbol(op[1]), var_name(op[3]))
+					print '%s = %s %s %s;' % (self.mem_var(addr), self.mem_var(op[2]), alu_op_symbol(op[1]), self.mem_var(op[3]))
 			elif op[0] == 'output':
-				print 'state->output[%d] = state->%s;' % (op[1], var_name(op[2]))
+				print '%soutput[%d] = %s;' % (self.state_prefix, op[1], self.mem_var(op[2]))
 			elif op[0] == 'phi':
 				raise Exception('Schweinerei')
 			elif op[0] == 'noop':
@@ -340,30 +384,37 @@ class CGenerator (CodeCollector):
 				phi = self.code[addr+1]
 				if phi[0] != 'phi':
 					raise Exception('Schweinerei')
-				print 'if (state->%s %s 0.0)' % (var_name(op[2]), cmp_op_name(op[1]))
-				print '    state->%s = state->%s;' % (var_name(addr+1), var_name(phi[1]))
+				print 'if (%s %s 0.0)' % (self.mem_var(op[2]), cmp_op_name(op[1]))
+				print '    %s = %s;' % (self.mem_var(addr+1), self.mem_var(phi[1]))
 				print 'else'
-				print '    state->%s = state->%s;' % (var_name(addr+1), var_name(phi[2]))
+				print '    %s = %s;' % (self.mem_var(addr+1), self.mem_var(phi[2]))
 				op = phi
 				addr += 1
 			elif op[0] == 'sqrt':
-				print 'state->%s = sqrt(state->%s);' % (var_name(addr), var_name(op[1]))
+				if self.language == 'C':
+					print '%s = sqrt(%s);' % (self.mem_var(addr), self.mem_var(op[1]))
+				else:
+					print '%s = Math.sqrt(%s);' % (self.mem_var(addr), self.mem_var(op[1]))
 			elif op[0] == 'copy':
-				print 'state->%s = state->%s;' % (var_name(addr), var_name(op[1]))
+				print '%s = %s;' % (self.mem_var(addr), self.mem_var(op[1]))
 			elif op[0] == 'input':
-				print 'state->%s = state->inputs.input_%d;' % (var_name(addr), op[1])
+				print '%s = %s;' % (self.mem_var(addr), self.input_var(op[1]))
 			else:
 				raise Exception('Unknown opcode %s' % op[0])
 			#if op[0] != 'noop' and op[0] != 'cmpz' and op[0] != 'output':
 			#print 'printf("%%d %d %%.8f\\n", state->num_timesteps_executed, state->%s);' % (addr, var_name(addr))
 			addr += 1
-		print '++state->num_timesteps_executed;'
+		print '++%snum_timesteps_executed;' % self.state_prefix
 		print '}'
 
 	def finish(self):
+		if self.language == 'Java':
+			print 'public class Machine {'
 		self.gen_struct()
 		self.gen_inits()
 		self.gen_loop()
+		if self.language == 'Java':
+			print '}'
 
 def to_binary(i):
 	s = ''
@@ -378,7 +429,9 @@ def to_binary(i):
 if len(sys.argv) > 1 and sys.argv[1] == "-d":
 	backend = CodeDisassembler()
 elif len(sys.argv) > 1 and sys.argv[1] == "-c":
-	backend = CGenerator()
+	backend = Compiler('C')
+elif len(sys.argv) > 1 and sys.argv[1] == "-j":
+	backend = Compiler('Java')
 else:
 	backend = Decompiler()
 
