@@ -1868,7 +1868,7 @@ ellipse_to_circular_transfer (machine_state_t *state)
 	set_thrust(&copy, thrust);
 	do_n_timesteps(&copy, 1);
 
-	g_print("trying thrust %f\n", thrust);
+	g_print("trying thrust %f\n", middle);
 	result = calc_ellipse_bertl(&copy, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee,
 				    get_pos, target * 1.5);
 
