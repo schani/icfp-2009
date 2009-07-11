@@ -1868,7 +1868,7 @@ ellipse_to_circular_transfer (machine_state_t *state)
 	set_thrust(&copy, thrust);
 	do_n_timesteps(&copy, 1);
 
-	g_print("trying thrust %f\n", thrust);
+	g_print("trying thrust %f\n", middle);
 	result = calc_ellipse_bertl(&copy, &our_apogee, &our_perigee, &t_to_our_apogee, &t_to_our_perigee,
 				    get_pos, target * 1.5);
 
@@ -2042,6 +2042,13 @@ run_trace_file (FILE *file, machine_state_t *state)
     g_print("score %f\n", state->output[0]);
 }
 
+static void
+usage (const char *progname)
+{
+    printf("USAGE: %s -d <dumpfile> -s <scenario id>  [-i <inputtrace> | -t <outputtrace>]\n", progname);
+    exit(1);
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -2049,6 +2056,7 @@ main (int argc, char *argv[])
     int num_iters, i;
     double dest_apogee;
     gboolean have_angle = FALSE;
+    gboolean run_only = FALSE;
     char *global_trace_name = NULL;
     int opt;
     int scenario = -1;
@@ -2058,7 +2066,7 @@ main (int argc, char *argv[])
 
     //fesetround(FE_TOWARDZERO);
 
-    while ((opt = getopt(argc, argv, "d:i:t:s:")) != -1) {
+    while ((opt = getopt(argc, argv, "d:i:t:s:r")) != -1) {
 	switch (opt) {
 	    case 'd' :
 		dump_file = fopen(optarg, "w");
@@ -2078,8 +2086,12 @@ main (int argc, char *argv[])
 		scenario = atoi(optarg);
 		break;
 
+	    case 'r' :
+		run_only = TRUE;
+		break;
+
             case '?' :
-                printf("USAGE: %s -d <dumpfile> -s <scenario id>  [-i <inputtrace> | -t <outputtrace>]\n", argv[0]);
+		usage(argv[0]);
                 break;
 
 	    default :
@@ -2090,14 +2102,12 @@ main (int argc, char *argv[])
 
     if (trace_input_file == NULL && scenario < 0) {
 	g_print("need scenario\n");
-        printf("USAGE: %s -d <dumpfile> -s <scenario id>  [-i <inputtrace> | -t <outputtrace>]\n", argv[0]);
-	return 1;
+	usage(argv[0]);
     }
 
     if (trace_input_file != NULL && global_trace_name != NULL) {
 	g_print("cannot have both input and output traces\n");
-        printf("USAGE: %s -d <dumpfile> -s <scenario id>  [-i <inputtrace> | -t <outputtrace>]\n", argv[0]);
-	return 1;
+	usage(argv[0]);
     }
 
     if (global_trace_name != NULL)
@@ -2114,6 +2124,12 @@ main (int argc, char *argv[])
     global_state.inputs.input_16000 = scenario;
 
     global_timestep();
+
+    if (run_only) {
+	while (global_state.num_timesteps_executed < 3000000)
+	    do_timestep(&global_state);
+	return 0;
+    }
 
 #if defined(BIN1)
 
